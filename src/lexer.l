@@ -9,7 +9,7 @@
 
 %%
 [ \t\n]+              ;
-"print"               return PRINT;
+"printf"               return PRINTF;
 [0-9]+(\.[0-9]+)?     { yylval.num = atof(yytext); return NUMBER; }
 \"([^"]*)\"           { yylval.str = strdup(yytext + 1); yylval.str[strlen(yylval.str) - 1] = 0; return STRING; }
 "+"                   return '+';

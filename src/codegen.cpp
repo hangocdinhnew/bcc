@@ -46,10 +46,17 @@ llvm::Value *BinaryExprAST::codegen() {
 }
 
 llvm::Value *PrintExprAST::codegen() {
-  llvm::Value *val = Expr->codegen();
-  llvm::Value *fmt =
-      Builder.CreateGlobalString("%s\n", "fmtStr", 0, TheModule.get());
-  return Builder.CreateCall(PrintfFunc, {fmt, val});
+  std::vector<llvm::Value *> printfArgs;
+
+  // First argument: format string
+  llvm::Value *fmt = Format->codegen();
+  printfArgs.push_back(fmt);
+
+  // Remaining arguments
+  for (auto &arg : Args)
+    printfArgs.push_back(arg->codegen());
+
+  return Builder.CreateCall(PrintfFunc, printfArgs, "callprintf");
 }
 
 llvm::Value *StringLiteralExprAST::codegen() {
@@ -72,5 +79,15 @@ void generateMain(std::unique_ptr<ExprAST> &expr) {
   expr->codegen();
 
   Builder.CreateRet(ConstantInt::get(Type::getInt32Ty(TheContext), 0));
+}
+
+llvm::FunctionCallee declarePrintf() {
+  auto &ctx = TheContext;
+
+  llvm::FunctionType *printfType = llvm::FunctionType::get(
+      llvm::Type::getInt32Ty(ctx),
+      llvm::PointerType::get(llvm::Type::getInt8Ty(ctx), 0), true);
+
+  return TheModule->getOrInsertFunction("printf", printfType);
 }
 } // namespace bcc

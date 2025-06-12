@@ -15,4 +15,5 @@ extern llvm::IRBuilder<> Builder;
 extern std::unique_ptr<llvm::Module> TheModule;
 extern llvm::FunctionCallee PrintfFunc;
 void generateMain(std::unique_ptr<ExprAST> &expr);
+llvm::FunctionCallee declarePrintf();
 } // namespace bcc

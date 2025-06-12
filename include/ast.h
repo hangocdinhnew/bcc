@@ -42,10 +42,14 @@ public:
 };
 
 class PrintExprAST : public ExprAST {
-  std::unique_ptr<ExprAST> Expr;
+  std::unique_ptr<ExprAST> Format;
+  std::vector<std::unique_ptr<ExprAST>> Args;
 
 public:
-  PrintExprAST(std::unique_ptr<ExprAST> Expr) : Expr(std::move(Expr)) {}
+  PrintExprAST(std::unique_ptr<ExprAST> Format,
+               std::vector<std::unique_ptr<ExprAST>> Args)
+      : Format(std::move(Format)), Args(std::move(Args)) {}
+
   llvm::Value *codegen() override;
 };
 

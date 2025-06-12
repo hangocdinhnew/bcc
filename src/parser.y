@@ -1,3 +1,23 @@
+%start input
+%define parse.error verbose
+
+%left '+' '-'
+%left '*' '/'
+
+%union {
+  double num;
+  char* str;
+  bcc::ExprAST* expr;
+  std::vector<bcc::ExprAST*> *args;
+}
+
+%token <num> NUMBER
+%token <str> STRING
+%token PRINTF
+
+%type <expr> expression
+%type <args> expr_list
+
 %{
   #include <cstdio>
   #include <cstdlib>
@@ -19,31 +39,46 @@
   #include "ast.h"
 }
 
-%define parse.error verbose
-
-%union {
-  double num;
-  char* str;
-  bcc::ExprAST* expr;
-}
-
-%token <num> NUMBER
-%token <str> STRING
-%token PRINT
-
-%type <expr> expression
-
 %%
 
+// The main entry point
 input:
-    PRINT '(' expression ')' { root = std::make_unique<bcc::PrintExprAST>(std::unique_ptr<bcc::ExprAST>($3)); }
+    /* empty */
+  | input statement
+  ;
+
+statement:
+    PRINTF '(' STRING ')' {
+      std::vector<std::unique_ptr<bcc::ExprAST>> argsVec;
+      root = std::make_unique<bcc::PrintExprAST>(
+          std::make_unique<bcc::StringLiteralExprAST>($3),
+          std::move(argsVec));
+    }
+  | PRINTF '(' STRING ',' expr_list ')' {
+      std::vector<std::unique_ptr<bcc::ExprAST>> argsVec;
+      for (auto *arg : *$5) argsVec.emplace_back(arg);
+      delete $5;
+
+      root = std::make_unique<bcc::PrintExprAST>(
+          std::make_unique<bcc::StringLiteralExprAST>($3),
+          std::move(argsVec));
+    }
+  ;
+
+expr_list:
+    expression                     { $$ = new std::vector<bcc::ExprAST*>(); $$->push_back($1); }
+  | expr_list ',' expression       { $$->push_back($3); $$ = $1; }
   ;
 
 expression:
-    NUMBER           { $$ = new bcc::NumberExprAST($1); }
-  | STRING           { $$ = new bcc::StringLiteralExprAST($1); }
-  | expression '+' expression { $$ = new bcc::BinaryExprAST('+', std::unique_ptr<bcc::ExprAST>($1), std::unique_ptr<bcc::ExprAST>($3)); }
-  | expression '*' expression { $$ = new bcc::BinaryExprAST('*', std::unique_ptr<bcc::ExprAST>($1), std::unique_ptr<bcc::ExprAST>($3)); }
+    NUMBER                         { $$ = new bcc::NumberExprAST($1); }
+  | STRING                         { $$ = new bcc::StringLiteralExprAST($1); }
+  | expression '+' expression      { $$ = new bcc::BinaryExprAST('+',
+                                        std::unique_ptr<bcc::ExprAST>($1),
+                                        std::unique_ptr<bcc::ExprAST>($3)); }
+  | expression '*' expression      { $$ = new bcc::BinaryExprAST('*',
+                                        std::unique_ptr<bcc::ExprAST>($1),
+                                        std::unique_ptr<bcc::ExprAST>($3)); }
   ;
 
 %%

@@ -39,8 +39,13 @@ int main(int argc, char **argv) {
       outFile = argv[++i];
     else if (arg == "--no-cleanup")
       noCleanup = true;
-    else
+    else {
       inputFile = arg;
+      if (inputFile.size() < 2 || inputFile.substr(inputFile.size() - 2) != ".b") {
+        std::cerr << "Error: input file must have an .b extension!\n";
+        return 1;
+      }
+    }
   }
 
   if (inputFile.empty()) {
@@ -68,10 +73,7 @@ int main(int argc, char **argv) {
   yyparse(); // Fills `root`
 
   // Setup LLVM for printf
-  llvm::FunctionType *printfType = llvm::FunctionType::get(
-      llvm::Type::getInt32Ty(bcc::TheContext),
-      llvm::PointerType::get(llvm::Type::getInt8Ty(bcc::TheContext), 0), true);
-  bcc::PrintfFunc = bcc::TheModule->getOrInsertFunction("printf", printfType);
+  bcc::PrintfFunc = bcc::declarePrintf();
 
   bcc::generateMain(root);
 
