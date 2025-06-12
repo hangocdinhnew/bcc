@@ -12,6 +12,8 @@ find_package(FLEX REQUIRED)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 
 include_directories(${LLVM_INCLUDE_DIRS})
+include_directories(${BISON_INCLUDE_DIRS})
+include_directories(${FLEX_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
 BISON_TARGET(Parser
