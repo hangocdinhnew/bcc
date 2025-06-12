@@ -30,6 +30,7 @@ FLEX_TARGET(Lexer
 set(SOURCES
   "./src/main.cpp"
   "./src/codegen.cpp"
+  "./src/lexer_utils.cpp"
   ${BISON_Parser_OUTPUTS}
   ${FLEX_Lexer_OUTPUTS}
 )
