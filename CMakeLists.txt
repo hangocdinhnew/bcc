@@ -40,4 +40,4 @@ add_executable(bcc
 target_include_directories(bcc PUBLIC "include/")
 target_include_directories(bcc PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
-target_link_libraries(bcc LLVM)
+target_link_libraries(bcc PUBLIC LLVM pegtl)
