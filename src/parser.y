@@ -12,7 +12,7 @@
   std::vector<bcc::FunctionAST*> *funcs;
   std::vector<bcc::ExprAST*> *args;
   std::vector<std::unique_ptr<bcc::ExprAST>> *stmts;
-  std::vector<std::string>* str_list;
+  std::vector<std::pair<std::string, std::string>>* param_list;
   bcc::ExternAST* extrn;
 }
 
@@ -30,6 +30,7 @@
 %token I64
 %token F32
 %token F64
+%token <num> POSITIONAL_PARAM
 
 %type <expr> expression
 %type <args> expr_list
@@ -41,8 +42,8 @@
 %type <extrn> extrn_decl
 %type <str> base_type
 %type <str> type
-%type <str_list> param_list
-%type <str_list> param_list_nonempty
+%type <param_list> param_list
+%type <param_list> param_list_nonempty
 
 %{
   #include <cstdio>
@@ -58,6 +59,14 @@
 
   void yyerror(const char *s) {
     std::cerr << "Parse error: " << s << std::endl;
+  }
+
+  static std::vector<std::string> extractTypes(const std::vector<std::pair<std::string, std::string>> &params) {
+    std::vector<std::string> types;
+    for (const auto &p : params) {
+      types.push_back(p.first);
+    }
+    return types;
   }
 %}
 
@@ -78,7 +87,8 @@ input:
 
 extrn_decl:
     EXTRN type IDENTIFIER '(' param_list ')' ';' {
-      $$ = new bcc::ExternAST($3, $2, *$5);
+      auto typeList = extractTypes(*$5);
+      $$ = new bcc::ExternAST($3, $2, typeList);
       $$->codegen();
       free($2);
       free($3);
@@ -87,20 +97,37 @@ extrn_decl:
 ;
 
 param_list:
-    /* empty */ { $$ = new std::vector<std::string>(); }
+    /* empty */ { $$ = new std::vector<std::pair<std::string, std::string>>(); }
   | param_list_nonempty { $$ = $1; }
 ;
 
 param_list_nonempty:
-    type { $$ = new std::vector<std::string>({$1}); }
-  | param_list_nonempty ',' type {
-      $1->push_back($3);
-      $$ = $1;
-  }
-  | param_list_nonempty ',' ELLIPSIS {
-      $1->push_back("...");
-      $$ = $1;
-  }
+      type IDENTIFIER {
+        $$ = new std::vector<std::pair<std::string, std::string>>();
+        $$->emplace_back($1, $2);
+        free($1);
+        free($2);
+      }
+    | type {
+        $$ = new std::vector<std::pair<std::string, std::string>>();
+        $$->emplace_back($1, "");
+        free($1);
+      }
+    | param_list_nonempty ',' type IDENTIFIER {
+        $1->emplace_back($3, $4);
+        free($3);
+        free($4);
+        $$ = $1;
+      }
+    | param_list_nonempty ',' type {
+        $1->emplace_back($3, "");
+        free($3);
+        $$ = $1;
+      }
+    | param_list_nonempty ',' ELLIPSIS {
+        $1->emplace_back("...", "...");
+        $$ = $1;
+      }
 ;
 
 type:
@@ -123,15 +150,16 @@ base_type:
 
 function_def:
     type IDENTIFIER '(' param_list ')' block {
+      auto typeList = extractTypes(*$4);
       auto func = new bcc::FunctionAST(
         $2,
         $1,
-        *$4,
+        typeList,
         std::make_unique<bcc::BlockAST>(std::move(*$6))
       );
+      $$ = func;
+      $$->codegen();
       delete $4;
-      delete $6;
-      bcc::functions.push_back(std::unique_ptr<bcc::FunctionAST>(func));
     }
 ;
 
@@ -185,6 +213,7 @@ expression:
   | expression '*' expression      { $$ = new bcc::BinaryExprAST('*',
                                         std::unique_ptr<bcc::ExprAST>($1),
                                         std::unique_ptr<bcc::ExprAST>($3)); }
+  | POSITIONAL_PARAM               { $$ = new bcc::PositionalParamExprAST((int)$1); }
 ;
 
 %%

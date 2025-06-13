@@ -12,6 +12,10 @@
 [ \t\n]+              ;
 "extrn"               return EXTRN;
 "return"              return RETURN;
+"%"[0-9]+ {
+    yylval.num = atoi(yytext + 1);
+    return POSITIONAL_PARAM;
+}
 [0-9]+(\.[0-9]+)?     { yylval.num = atof(yytext); return NUMBER; }
 \"([^\\\"]|\\.)*\" {
     char* raw = strdup(yytext + 1);

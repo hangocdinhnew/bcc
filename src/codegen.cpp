@@ -87,46 +87,48 @@ llvm::Value *StringLiteralExprAST::codegen() {
 
 StringLiteralExprAST::StringLiteralExprAST(const std::string &val) : Val(val) {}
 
-void generateMain(std::unique_ptr<ExprAST> &expr) {
-  using namespace llvm;
-
-  FunctionType *mainType =
-      FunctionType::get(Type::getInt32Ty(TheContext), false);
-  Function *mainFunc = Function::Create(mainType, Function::ExternalLinkage,
-                                        "main", TheModule.get());
-
-  BasicBlock *BB = BasicBlock::Create(TheContext, "entry", mainFunc);
-  Builder.SetInsertPoint(BB);
-
-  expr->codegen();
-
-  Builder.CreateRet(ConstantInt::get(Type::getInt32Ty(TheContext), 0));
-}
-
 llvm::Function *FunctionAST::codegen() {
+  CurrentFunction = this;
   auto &ctx = TheContext;
 
   llvm::Type *retTy = getLLVMTypeFor(RetType, ctx);
-  std::vector<llvm::Type *> paramTypes;
 
+  std::vector<llvm::Type *> paramTypes;
   for (const auto &argType : ArgTypes) {
     paramTypes.push_back(getLLVMTypeFor(argType, ctx));
   }
 
-  llvm::FunctionType *fnType =
-      llvm::FunctionType::get(retTy, paramTypes, false);
+  llvm::FunctionType *fnType = llvm::FunctionType::get(retTy, paramTypes, false);
 
-  auto function = llvm::Function::Create(
-      fnType, llvm::Function::ExternalLinkage, Name, TheModule.get());
+  llvm::Function *function = TheModule->getFunction(Name);
+  if (function) {
+    if (!function->empty())
+      throw std::runtime_error("Function redefinition: " + Name);
+  } else {
+    function = llvm::Function::Create(
+        fnType, llvm::Function::ExternalLinkage, Name, TheModule.get());
+  }
+
+  FunctionProtos[Name] = function;
 
   auto BB = llvm::BasicBlock::Create(ctx, "entry", function);
   Builder.SetInsertPoint(BB);
+  // Set up NamedValues for function arguments
+  NamedValues.clear();
+  unsigned idx = 0;
+  for (auto &arg : function->args()) {
+    arg.setName("arg" + std::to_string(idx + 1));
+    NamedValues["%" + std::to_string(idx + 1)] = &arg;
+    idx++;
+  }
 
   Body->codegen();
 
+  CurrentFunction = nullptr;
+
   if (BB->getTerminator()) {
-    if (retTy->isVoidTy()) {
-      throw std::runtime_error("Void function cannot return!");
+    if(retTy->isVoidTy()) {
+      throw std::runtime_error("Void function calls return: " + Name);
     }
   }
 
@@ -134,11 +136,9 @@ llvm::Function *FunctionAST::codegen() {
     if (retTy->isVoidTy()) {
       Builder.CreateRetVoid();
     } else {
-      throw std::runtime_error("Non-void function missing return statement!\n");
+      throw std::runtime_error("Non-void function missing return statement: " + Name);
     }
   }
-
-  FunctionProtos[Name] = function;
 
   return function;
 }
@@ -210,6 +210,7 @@ llvm::Function *ExternAST::codegen() {
   FunctionProtos[Name] = func;
   return func;
 }
+
 llvm::Value *ReturnExprAST::codegen() {
   if (Expr) {
     auto val = Expr->codegen();
@@ -218,5 +219,20 @@ llvm::Value *ReturnExprAST::codegen() {
     Builder.CreateRetVoid();
   }
   return nullptr;
+}
+
+llvm::Value *PositionalParamExprAST::codegen() {
+  if (!CurrentFunction)
+    throw std::runtime_error("Positional param used outside function");
+
+  auto *func = FunctionProtos[CurrentFunction->getName()];
+  auto args = func->arg_begin();
+
+  std::advance(args, Index - 1);
+
+  if (Index <= 0 || Index > func->arg_size())
+    throw std::runtime_error("Invalid positional param index");
+
+  return &*args;
 }
 } // namespace bcc

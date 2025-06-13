@@ -98,14 +98,6 @@ int main(int argc, char **argv) {
     func->codegen();
   }
 
-  if (!bcc::FunctionProtos.count("main")) {
-    return 1;
-  }
-
-  if (llvm::verifyModule(*bcc::TheModule, &llvm::errs())) {
-    throw std::runtime_error("Generated IR is invalid!");
-  }
-
   if (emitOnlyIR) {
     std::error_code ec;
     std::string irFileName = outFile + ".ll";
@@ -122,6 +114,15 @@ int main(int argc, char **argv) {
 
     std::cout << "Successfully emitted IR: " << irFileName << "\n";
     return 0;
+  }
+
+  if (llvm::verifyModule(*bcc::TheModule, &llvm::errs())) {
+    throw std::runtime_error("Generated IR is invalid!");
+  }
+
+  if (!bcc::FunctionProtos.count("main")) {
+    std::cerr << "Error: main function not found in prototypes!\n";
+    return 1;
   }
 
   auto targetTriple = llvm::sys::getDefaultTargetTriple();

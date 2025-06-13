@@ -76,6 +76,8 @@ public:
       : Name(std::move(Name)), RetType(std::move(RetType)),
         ArgTypes(std::move(ArgTypes)), Body(std::move(Body)) {}
 
+  std::string getName() { return Name; }
+
   llvm::Function *codegen();
 };
 
@@ -107,6 +109,14 @@ class ReturnExprAST : public ExprAST {
 
 public:
   ReturnExprAST(std::unique_ptr<ExprAST> expr) : Expr(std::move(expr)) {}
+  llvm::Value *codegen() override;
+};
+
+class PositionalParamExprAST : public ExprAST {
+  int Index;
+
+public:
+  PositionalParamExprAST(int idx) : Index(idx) {}
   llvm::Value *codegen() override;
 };
 } // namespace bcc
