@@ -48,8 +48,8 @@ int main(int argc, char **argv) {
 #else
       outFile = std::filesystem::path(inputFile).stem().string();
 #endif
-      if (inputFile.size() < 2 ||
-          inputFile.substr(inputFile.size() - 2) != ".bc") {
+      if (inputFile.size() < 3 ||
+          inputFile.substr(inputFile.size() - 3) != ".bc") {
         std::cerr << "Error: input file must have an .bc extension!\n";
         return 1;
       }
