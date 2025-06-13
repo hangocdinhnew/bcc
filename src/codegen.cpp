@@ -95,7 +95,13 @@ llvm::FunctionCallee declarePrintf() {
 
 llvm::Function *FunctionAST::codegen() {
   auto &ctx = TheContext;
-  auto fnType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), false);
+  llvm::FunctionType *fnType;
+  if (Name == "main") {
+    fnType = llvm::FunctionType::get(llvm::Type::getInt32Ty(ctx), false);
+  } else {
+    fnType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), false);
+  }
+
   auto function = llvm::Function::Create(
       fnType, llvm::Function::ExternalLinkage, Name, TheModule.get());
 
@@ -104,7 +110,11 @@ llvm::Function *FunctionAST::codegen() {
 
   Body->codegen();
 
-  Builder.CreateRetVoid();
+  if (Name == "main") {
+    Builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), 0));
+  } else {
+    Builder.CreateRetVoid();
+  }
 
   FunctionProtos[Name] = function;
 
