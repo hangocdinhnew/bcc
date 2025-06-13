@@ -18,6 +18,7 @@
 #include <llvm/Support/FormattedStream.h>
 #include <llvm/TargetParser/Host.h>
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/Verifier.h>
 // clang-format on
 
 extern int yyparse();
@@ -99,6 +100,10 @@ int main(int argc, char **argv) {
 
   if (!bcc::FunctionProtos.count("main")) {
     return 1;
+  }
+
+  if (llvm::verifyModule(*bcc::TheModule, &llvm::errs())) {
+    throw std::runtime_error("Generated IR is invalid!");
   }
 
   if (emitOnlyIR) {

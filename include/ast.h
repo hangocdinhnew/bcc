@@ -66,11 +66,16 @@ public:
 
 class FunctionAST {
   std::string Name;
+  std::string RetType;
+  std::vector<std::string> ArgTypes;
   std::unique_ptr<BlockAST> Body;
 
 public:
-  FunctionAST(std::string Name, std::unique_ptr<BlockAST> Body)
-      : Name(std::move(Name)), Body(std::move(Body)) {}
+  FunctionAST(std::string Name, std::string RetType,
+              std::vector<std::string> ArgTypes, std::unique_ptr<BlockAST> Body)
+      : Name(std::move(Name)), RetType(std::move(RetType)),
+        ArgTypes(std::move(ArgTypes)), Body(std::move(Body)) {}
+
   llvm::Function *codegen();
 };
 
@@ -95,5 +100,13 @@ public:
             const std::vector<std::string> &Args)
       : Name(Name), RetType(RetType), ArgTypes(Args) {}
   llvm::Function *codegen();
+};
+
+class ReturnExprAST : public ExprAST {
+  std::unique_ptr<ExprAST> Expr;
+
+public:
+  ReturnExprAST(std::unique_ptr<ExprAST> expr) : Expr(std::move(expr)) {}
+  llvm::Value *codegen() override;
 };
 } // namespace bcc

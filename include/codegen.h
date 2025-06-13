@@ -15,7 +15,6 @@ extern llvm::LLVMContext TheContext;
 extern llvm::IRBuilder<> Builder;
 extern std::unique_ptr<llvm::Module> TheModule;
 extern llvm::FunctionCallee PrintfFunc;
-void generateMain(std::unique_ptr<ExprAST> &expr);
 llvm::FunctionCallee declarePrintf();
 extern std::vector<std::unique_ptr<ExternAST>> externs;
 extern std::vector<std::unique_ptr<bcc::FunctionAST>> functions;

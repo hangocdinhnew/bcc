@@ -17,6 +17,7 @@
 }
 
 %token EXTRN
+%token RETURN
 
 %token <num> NUMBER
 %token <str> STRING
@@ -121,12 +122,15 @@ base_type:
 ;
 
 function_def:
-    IDENTIFIER '(' ')' block {
+    type IDENTIFIER '(' param_list ')' block {
       auto func = new bcc::FunctionAST(
+        $2,
         $1,
-        std::make_unique<bcc::BlockAST>(std::move(*$4))
+        *$4,
+        std::make_unique<bcc::BlockAST>(std::move(*$6))
       );
       delete $4;
+      delete $6;
       bcc::functions.push_back(std::unique_ptr<bcc::FunctionAST>(func));
     }
 ;
@@ -153,7 +157,10 @@ statement:
   | IDENTIFIER '(' ')' ';' {
       $$ = new bcc::CallExprAST($1, {});
   }
-  ;
+  | RETURN expression ';' {
+      $$ = new bcc::ReturnExprAST(std::unique_ptr<bcc::ExprAST>($2));
+  }
+;
 
 expr_list:
     expression                     { $$ = new std::vector<bcc::ExprAST*>(); $$->push_back($1); }
@@ -163,12 +170,21 @@ expr_list:
 expression:
     NUMBER                         { $$ = new bcc::NumberExprAST($1); }
   | STRING                         { $$ = new bcc::StringLiteralExprAST($1); }
+  | IDENTIFIER '(' expr_list ')' { 
+      std::vector<std::unique_ptr<bcc::ExprAST>> argsVec;
+      for (auto *arg : *$3) argsVec.emplace_back(arg);
+      delete $3;
+      $$ = new bcc::CallExprAST($1, std::move(argsVec));
+    }
+  | IDENTIFIER '(' ')' {
+      $$ = new bcc::CallExprAST($1, {});
+    }
   | expression '+' expression      { $$ = new bcc::BinaryExprAST('+',
                                         std::unique_ptr<bcc::ExprAST>($1),
                                         std::unique_ptr<bcc::ExprAST>($3)); }
   | expression '*' expression      { $$ = new bcc::BinaryExprAST('*',
                                         std::unique_ptr<bcc::ExprAST>($1),
                                         std::unique_ptr<bcc::ExprAST>($3)); }
-  ;
+;
 
 %%

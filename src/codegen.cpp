@@ -16,6 +16,7 @@ std::vector<std::unique_ptr<ExternAST>> externs;
 std::vector<std::unique_ptr<bcc::FunctionAST>> functions;
 
 static std::map<std::string, llvm::Value *> NamedValues;
+static thread_local FunctionAST *CurrentFunction = nullptr;
 
 llvm::Value *NumberExprAST::codegen() {
   if (Val == (int64_t)Val) {
@@ -104,12 +105,16 @@ void generateMain(std::unique_ptr<ExprAST> &expr) {
 
 llvm::Function *FunctionAST::codegen() {
   auto &ctx = TheContext;
-  llvm::FunctionType *fnType;
-  if (Name == "main") {
-    fnType = llvm::FunctionType::get(llvm::Type::getInt32Ty(ctx), false);
-  } else {
-    fnType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), false);
+
+  llvm::Type *retTy = getLLVMTypeFor(RetType, ctx);
+  std::vector<llvm::Type *> paramTypes;
+
+  for (const auto &argType : ArgTypes) {
+    paramTypes.push_back(getLLVMTypeFor(argType, ctx));
   }
+
+  llvm::FunctionType *fnType =
+      llvm::FunctionType::get(retTy, paramTypes, false);
 
   auto function = llvm::Function::Create(
       fnType, llvm::Function::ExternalLinkage, Name, TheModule.get());
@@ -119,10 +124,18 @@ llvm::Function *FunctionAST::codegen() {
 
   Body->codegen();
 
-  if (Name == "main") {
-    Builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), 0));
-  } else {
-    Builder.CreateRetVoid();
+  if (BB->getTerminator()) {
+    if (retTy->isVoidTy()) {
+      Builder.CreateRetVoid();
+    }
+  }
+
+  if (!BB->getTerminator()) {
+    if (retTy->isVoidTy()) {
+      Builder.CreateRetVoid();
+    } else {
+      throw std::runtime_error("Non-void function missing return statement!\n");
+    }
   }
 
   FunctionProtos[Name] = function;
@@ -196,5 +209,14 @@ llvm::Function *ExternAST::codegen() {
   auto func = llvm::cast<llvm::Function>(callee);
   FunctionProtos[Name] = func;
   return func;
+}
+llvm::Value *ReturnExprAST::codegen() {
+  if (Expr) {
+    auto val = Expr->codegen();
+    Builder.CreateRet(val);
+  } else {
+    Builder.CreateRetVoid();
+  }
+  return nullptr;
 }
 } // namespace bcc
