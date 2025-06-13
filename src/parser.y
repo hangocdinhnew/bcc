@@ -12,11 +12,13 @@
   std::vector<bcc::FunctionAST*> *funcs;
   std::vector<bcc::ExprAST*> *args;
   std::vector<std::unique_ptr<bcc::ExprAST>> *stmts;
+  bcc::ExternAST* extrn;
 }
+
+%token EXTRN
 
 %token <num> NUMBER
 %token <str> STRING
-%token PRINTF
 %token <str> IDENTIFIER
 
 %type <expr> expression
@@ -26,6 +28,7 @@
 %type <stmts> statements
 %type <stmts> block
 %type <func> function_def
+%type <extrn> extrn_decl
 
 %{
   #include <cstdio>
@@ -56,8 +59,16 @@ input:
     /* empty */
   | input statement
   | input function_def
+  | input extrn_decl
   ;
 
+extrn_decl:
+    EXTRN IDENTIFIER ';' {
+      $$ = new bcc::ExternAST($2);
+      $$->codegen();
+      free($2);
+    }
+;
 
 function_def:
     IDENTIFIER '(' ')' block {
@@ -83,27 +94,13 @@ statements:
 ;
 
 statement:
-    PRINTF '(' STRING ')' {
-      std::vector<std::unique_ptr<bcc::ExprAST>> argsVec;
-      $$ = new bcc::PrintExprAST(
-          std::make_unique<bcc::StringLiteralExprAST>($3),
-          std::move(argsVec));
-    }
-  | PRINTF '(' STRING ',' expr_list ')' {
-      std::vector<std::unique_ptr<bcc::ExprAST>> argsVec;
-      for (auto *arg : *$5) argsVec.emplace_back(arg);
-      delete $5;
-      $$ = new bcc::PrintExprAST(
-          std::make_unique<bcc::StringLiteralExprAST>($3),
-          std::move(argsVec));
-    }
-  | IDENTIFIER '(' expr_list ')' {
+  IDENTIFIER '(' expr_list ')' ';' {
       std::vector<std::unique_ptr<bcc::ExprAST>> argsVec;
       for (auto *arg : *$3) argsVec.emplace_back(arg);
       delete $3;
       $$ = new bcc::CallExprAST($1, std::move(argsVec));
   }
-  | IDENTIFIER '(' ')' {
+  | IDENTIFIER '(' ')' ';' {
       $$ = new bcc::CallExprAST($1, {});
   }
   ;

@@ -73,7 +73,9 @@ int main(int argc, char **argv) {
   lexer.switch_streams(&input, nullptr);
   yyparse(); // Fills `root`
 
-  bcc::PrintfFunc = bcc::declarePrintf();
+  for (auto &ext : bcc::externs) {
+    ext->codegen();
+  }
 
   for (auto &func : bcc::functions) {
     func->codegen();

@@ -41,18 +41,6 @@ public:
   llvm::Value *codegen() override;
 };
 
-class PrintExprAST : public ExprAST {
-  std::unique_ptr<ExprAST> Format;
-  std::vector<std::unique_ptr<ExprAST>> Args;
-
-public:
-  PrintExprAST(std::unique_ptr<ExprAST> Format,
-               std::vector<std::unique_ptr<ExprAST>> Args)
-      : Format(std::move(Format)), Args(std::move(Args)) {}
-
-  llvm::Value *codegen() override;
-};
-
 class StringLiteralExprAST : public ExprAST {
   std::string Val;
 
@@ -95,5 +83,13 @@ public:
               std::vector<std::unique_ptr<ExprAST>> Args = {})
       : Callee(Callee), Args(std::move(Args)) {}
   llvm::Value *codegen() override;
+};
+
+class ExternAST {
+  std::string Name;
+
+public:
+  ExternAST(const std::string &Name) : Name(Name) {}
+  llvm::Function *codegen();
 };
 } // namespace bcc

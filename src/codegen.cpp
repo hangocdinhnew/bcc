@@ -13,6 +13,7 @@ std::unique_ptr<llvm::Module> TheModule =
     std::make_unique<llvm::Module>("BCompiler", TheContext);
 llvm::FunctionCallee PrintfFunc;
 std::map<std::string, llvm::Function *> FunctionProtos;
+std::vector<std::unique_ptr<ExternAST>> externs;
 std::vector<std::unique_ptr<bcc::FunctionAST>> functions;
 
 static std::map<std::string, llvm::Value *> NamedValues;
@@ -45,20 +46,6 @@ llvm::Value *BinaryExprAST::codegen() {
   default:
     throw std::runtime_error("invalid binary operator");
   }
-}
-
-llvm::Value *PrintExprAST::codegen() {
-  std::vector<llvm::Value *> printfArgs;
-
-  // First argument: format string
-  llvm::Value *fmt = Format->codegen();
-  printfArgs.push_back(fmt);
-
-  // Remaining arguments
-  for (auto &arg : Args)
-    printfArgs.push_back(arg->codegen());
-
-  return Builder.CreateCall(PrintfFunc, printfArgs, "callprintf");
 }
 
 llvm::Value *StringLiteralExprAST::codegen() {
@@ -147,5 +134,17 @@ uint32_t fnv1a(const std::string &str) {
     hash *= 16777619u;
   }
   return hash;
+}
+
+llvm::Function *ExternAST::codegen() {
+  auto &ctx = TheContext;
+  llvm::FunctionType *funcType = llvm::FunctionType::get(
+      llvm::Type::getInt32Ty(ctx), false);
+
+  auto function = llvm::Function::Create(
+      funcType, llvm::Function::ExternalLinkage, Name, TheModule.get());
+
+  FunctionProtos[Name] = function;
+  return function;
 }
 } // namespace bcc

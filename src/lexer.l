@@ -10,7 +10,7 @@
 
 %%
 [ \t\n]+              ;
-"printf"               return PRINTF;
+"extrn"               return EXTRN;
 [0-9]+(\.[0-9]+)?     { yylval.num = atof(yytext); return NUMBER; }
 \"([^\\\"]|\\.)*\" {
     char* raw = strdup(yytext + 1);
@@ -26,5 +26,6 @@
 "/"                   return '/';
 "("                   return '(';
 ")"                   return ')';
+";"                   return ';';
 .                     return yytext[0];
 %%
