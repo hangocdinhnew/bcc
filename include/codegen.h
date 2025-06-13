@@ -6,6 +6,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Verifier.h>
+#include <map>
 #include "ast.h"
 // clang-format on
 
@@ -16,4 +17,7 @@ extern std::unique_ptr<llvm::Module> TheModule;
 extern llvm::FunctionCallee PrintfFunc;
 void generateMain(std::unique_ptr<ExprAST> &expr);
 llvm::FunctionCallee declarePrintf();
+extern std::vector<std::unique_ptr<bcc::FunctionAST>> functions;
+extern std::map<std::string, llvm::Function *> FunctionProtos;
+
 } // namespace bcc

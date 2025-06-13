@@ -41,7 +41,8 @@ int main(int argc, char **argv) {
       noCleanup = true;
     else {
       inputFile = arg;
-      if (inputFile.size() < 2 || inputFile.substr(inputFile.size() - 2) != ".b") {
+      if (inputFile.size() < 2 ||
+          inputFile.substr(inputFile.size() - 2) != ".b") {
         std::cerr << "Error: input file must have an .b extension!\n";
         return 1;
       }
@@ -72,10 +73,16 @@ int main(int argc, char **argv) {
   lexer.switch_streams(&input, nullptr);
   yyparse(); // Fills `root`
 
-  // Setup LLVM for printf
   bcc::PrintfFunc = bcc::declarePrintf();
 
-  bcc::generateMain(root);
+  for (auto &func : bcc::functions) {
+    func->codegen();
+  }
+
+  if (!bcc::FunctionProtos.count("main")) {
+    std::cerr << "Error: no main function defined!\n";
+    return 1;
+  }
 
   if (emitOnlyIR) {
     bcc::TheModule->print(llvm::outs(), nullptr);

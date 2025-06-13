@@ -12,6 +12,8 @@ llvm::IRBuilder<> Builder(TheContext);
 std::unique_ptr<llvm::Module> TheModule =
     std::make_unique<llvm::Module>("BCompiler", TheContext);
 llvm::FunctionCallee PrintfFunc;
+std::map<std::string, llvm::Function *> FunctionProtos;
+std::vector<std::unique_ptr<bcc::FunctionAST>> functions;
 
 static std::map<std::string, llvm::Value *> NamedValues;
 
@@ -89,5 +91,39 @@ llvm::FunctionCallee declarePrintf() {
       llvm::PointerType::get(llvm::Type::getInt8Ty(ctx), 0), true);
 
   return TheModule->getOrInsertFunction("printf", printfType);
+}
+
+llvm::Function *FunctionAST::codegen() {
+  auto &ctx = TheContext;
+  auto fnType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), false);
+  auto function = llvm::Function::Create(
+      fnType, llvm::Function::ExternalLinkage, Name, TheModule.get());
+
+  auto BB = llvm::BasicBlock::Create(ctx, "entry", function);
+  Builder.SetInsertPoint(BB);
+
+  Body->codegen();
+
+  Builder.CreateRetVoid();
+
+  FunctionProtos[Name] = function;
+
+  return function;
+}
+
+llvm::Value *CallExprAST::codegen() {
+  llvm::Function *calleeF = FunctionProtos[Callee];
+  if (!calleeF)
+    throw std::runtime_error("Unknown function referenced: " + Callee);
+
+  std::vector<llvm::Value *> argsV;
+  for (auto &arg : Args)
+    argsV.push_back(arg->codegen());
+
+  if (calleeF->getReturnType()->isVoidTy()) {
+    return Builder.CreateCall(calleeF, argsV);
+  } else {
+    return Builder.CreateCall(calleeF, argsV, "calltmp");
+  }
 }
 } // namespace bcc

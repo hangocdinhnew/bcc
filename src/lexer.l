@@ -19,6 +19,7 @@
     free(raw);
     return STRING;
 }
+[a-zA-Z_][a-zA-Z0-9_]* { yylval.str = strdup(yytext); return IDENTIFIER; }
 "+"                   return '+';
 "-"                   return '-';
 "*"                   return '*';

@@ -61,4 +61,25 @@ public:
   ~StringLiteralExprAST() = default;
   llvm::Value *codegen() override;
 };
+
+class FunctionAST {
+  std::string Name;
+  std::unique_ptr<ExprAST> Body;
+
+public:
+  FunctionAST(std::string Name, std::unique_ptr<ExprAST> Body)
+      : Name(std::move(Name)), Body(std::move(Body)) {}
+  llvm::Function *codegen();
+};
+
+class CallExprAST : public ExprAST {
+  std::string Callee;
+  std::vector<std::unique_ptr<ExprAST>> Args;
+
+public:
+  CallExprAST(const std::string &Callee,
+              std::vector<std::unique_ptr<ExprAST>> Args = {})
+      : Callee(Callee), Args(std::move(Args)) {}
+  llvm::Value *codegen() override;
+};
 } // namespace bcc
