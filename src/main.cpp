@@ -26,7 +26,7 @@ int yylex() { return lexer.yylex(); }
 
 int main(int argc, char **argv) {
   std::string inputFile;
-  std::string outFile = "out";
+  std::string outFile;
   bool runIt = false, emitOnlyIR = false, noCleanup = false;
 
   for (int i = 1; i < argc; ++i) {
@@ -41,9 +41,15 @@ int main(int argc, char **argv) {
       noCleanup = true;
     else {
       inputFile = arg;
+#ifdef _WIN32
+      outFile =
+          std::filesystem::path(inputFile).replace_extension(".exe").string();
+#else
+      outFile = std::filesystem::path(inputFile).stem().string();
+#endif
       if (inputFile.size() < 2 ||
-          inputFile.substr(inputFile.size() - 2) != ".b") {
-        std::cerr << "Error: input file must have an .b extension!\n";
+          inputFile.substr(inputFile.size() - 2) != ".bc") {
+        std::cerr << "Error: input file must have an .bc extension!\n";
         return 1;
       }
     }

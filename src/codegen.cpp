@@ -10,7 +10,7 @@ namespace bcc {
 llvm::LLVMContext TheContext;
 llvm::IRBuilder<> Builder(TheContext);
 std::unique_ptr<llvm::Module> TheModule =
-    std::make_unique<llvm::Module>("BCompiler", TheContext);
+    std::make_unique<llvm::Module>("B+ Compiler", TheContext);
 std::map<std::string, llvm::Function *> FunctionProtos;
 std::vector<std::unique_ptr<ExternAST>> externs;
 std::vector<std::unique_ptr<bcc::FunctionAST>> functions;
