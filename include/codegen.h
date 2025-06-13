@@ -19,5 +19,6 @@ void generateMain(std::unique_ptr<ExprAST> &expr);
 llvm::FunctionCallee declarePrintf();
 extern std::vector<std::unique_ptr<bcc::FunctionAST>> functions;
 extern std::map<std::string, llvm::Function *> FunctionProtos;
+uint32_t fnv1a(const std::string &str);
 
 } // namespace bcc

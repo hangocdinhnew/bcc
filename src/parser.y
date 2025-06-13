@@ -11,6 +11,7 @@
   bcc::FunctionAST* func;
   std::vector<bcc::FunctionAST*> *funcs;
   std::vector<bcc::ExprAST*> *args;
+  std::vector<std::unique_ptr<bcc::ExprAST>> *stmts;
 }
 
 %token <num> NUMBER
@@ -22,7 +23,8 @@
 %type <args> expr_list
 
 %type <expr> statement
-%type <expr> block
+%type <stmts> statements
+%type <stmts> block
 %type <func> function_def
 
 %{
@@ -59,14 +61,26 @@ input:
 
 function_def:
     IDENTIFIER '(' ')' block {
-      auto func = new bcc::FunctionAST($1, std::unique_ptr<bcc::ExprAST>($4));
+      auto func = new bcc::FunctionAST(
+        $1,
+        std::make_unique<bcc::BlockAST>(std::move(*$4))
+      );
+      delete $4;
       bcc::functions.push_back(std::unique_ptr<bcc::FunctionAST>(func));
     }
 ;
 
 block:
-    '{' statement '}' { $$ = $2; }
+    '{' statements '}' { $$ = $2; }
   ;
+
+statements:
+    { $$ = new std::vector<std::unique_ptr<bcc::ExprAST>>(); }
+    | statements statement  {
+      $1->push_back(std::unique_ptr<bcc::ExprAST>($2));
+      $$ = $1;
+    }
+;
 
 statement:
     PRINTF '(' STRING ')' {

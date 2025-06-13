@@ -62,7 +62,10 @@ llvm::Value *PrintExprAST::codegen() {
 }
 
 llvm::Value *StringLiteralExprAST::codegen() {
-  return Builder.CreateGlobalString(Val, "str", 0, TheModule.get());
+  uint32_t hashValue = fnv1a(Val);
+  std::string strname = "str." + std::to_string(hashValue);
+
+  return Builder.CreateGlobalString(Val, strname, 0, TheModule.get());
 }
 
 StringLiteralExprAST::StringLiteralExprAST(const std::string &val) : Val(val) {}
@@ -135,5 +138,14 @@ llvm::Value *CallExprAST::codegen() {
   } else {
     return Builder.CreateCall(calleeF, argsV, "calltmp");
   }
+}
+
+uint32_t fnv1a(const std::string &str) {
+  uint32_t hash = 2166136261u;
+  for (char c : str) {
+    hash ^= (uint8_t)c;
+    hash *= 16777619u;
+  }
+  return hash;
 }
 } // namespace bcc

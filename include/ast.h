@@ -62,12 +62,26 @@ public:
   llvm::Value *codegen() override;
 };
 
-class FunctionAST {
-  std::string Name;
-  std::unique_ptr<ExprAST> Body;
+class BlockAST : public ExprAST {
+  std::vector<std::unique_ptr<ExprAST>> Statements;
 
 public:
-  FunctionAST(std::string Name, std::unique_ptr<ExprAST> Body)
+  BlockAST(std::vector<std::unique_ptr<ExprAST>> stmts)
+      : Statements(std::move(stmts)) {}
+
+  llvm::Value *codegen() override {
+    for (auto &stmt : Statements)
+      stmt->codegen();
+    return nullptr;
+  }
+};
+
+class FunctionAST {
+  std::string Name;
+  std::unique_ptr<BlockAST> Body;
+
+public:
+  FunctionAST(std::string Name, std::unique_ptr<BlockAST> Body)
       : Name(std::move(Name)), Body(std::move(Body)) {}
   llvm::Function *codegen();
 };
