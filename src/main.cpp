@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <cstdlib>
+#include <filesystem>
 #include <memory>
 #include <FlexLexer.h>
 #include "codegen.h"

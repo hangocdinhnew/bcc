@@ -1,5 +1,8 @@
+// clang-format off
 #include <cstdlib>
+#include <cstring>
 #include <string>
+// clang-format on
 
 namespace bcc {
 char *unescape_string(const char *text) {
