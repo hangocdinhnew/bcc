@@ -87,9 +87,13 @@ public:
 
 class ExternAST {
   std::string Name;
+  std::string RetType;
+  std::vector<std::string> ArgTypes;
 
 public:
-  ExternAST(const std::string &Name) : Name(Name) {}
+  ExternAST(const std::string &Name, const std::string &RetType,
+            const std::vector<std::string> &Args)
+      : Name(Name), RetType(RetType), ArgTypes(Args) {}
   llvm::Function *codegen();
 };
 } // namespace bcc

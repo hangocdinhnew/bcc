@@ -12,6 +12,7 @@
   std::vector<bcc::FunctionAST*> *funcs;
   std::vector<bcc::ExprAST*> *args;
   std::vector<std::unique_ptr<bcc::ExprAST>> *stmts;
+  std::vector<std::string>* str_list;
   bcc::ExternAST* extrn;
 }
 
@@ -21,6 +22,14 @@
 %token <str> STRING
 %token <str> IDENTIFIER
 
+%token I32
+%token VOID
+%token PTR
+%token ELLIPSIS
+%token I64
+%token F32
+%token F64
+
 %type <expr> expression
 %type <args> expr_list
 
@@ -29,6 +38,10 @@
 %type <stmts> block
 %type <func> function_def
 %type <extrn> extrn_decl
+%type <str> base_type
+%type <str> type
+%type <str_list> param_list
+%type <str_list> param_list_nonempty
 
 %{
   #include <cstdio>
@@ -63,11 +76,48 @@ input:
   ;
 
 extrn_decl:
-    EXTRN IDENTIFIER ';' {
-      $$ = new bcc::ExternAST($2);
+    EXTRN type IDENTIFIER '(' param_list ')' ';' {
+      $$ = new bcc::ExternAST($3, $2, *$5);
       $$->codegen();
       free($2);
+      free($3);
+      delete $5;
     }
+;
+
+param_list:
+    /* empty */ { $$ = new std::vector<std::string>(); }
+  | param_list_nonempty { $$ = $1; }
+;
+
+param_list_nonempty:
+    type { $$ = new std::vector<std::string>({$1}); }
+  | param_list_nonempty ',' type {
+      $1->push_back($3);
+      $$ = $1;
+  }
+  | param_list_nonempty ',' ELLIPSIS {
+      $1->push_back("...");
+      $$ = $1;
+  }
+;
+
+type:
+    base_type { $$ = $1; }
+    | base_type '*' { 
+        std::string tmp = std::string($1) + "*";
+        $$ = strdup(tmp.c_str());
+        free($1);
+    }
+;
+
+base_type:
+    I32 { $$ = strdup("i32"); }
+  | F64 { $$ = strdup("i64"); }
+  | F32 { $$ = strdup("f32"); }
+  | F64 { $$ = strdup("f64"); }
+  | VOID { $$ = strdup("void"); }
+  | PTR { $$ = strdup("ptr"); }
 ;
 
 function_def:

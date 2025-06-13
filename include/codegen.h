@@ -22,4 +22,5 @@ extern std::vector<std::unique_ptr<bcc::FunctionAST>> functions;
 extern std::map<std::string, llvm::Function *> FunctionProtos;
 uint32_t fnv1a(const std::string &str);
 
+llvm::Type *getLLVMTypeFor(const std::string &typeStr, llvm::LLVMContext &ctx);
 } // namespace bcc

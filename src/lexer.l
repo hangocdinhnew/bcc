@@ -19,6 +19,13 @@
     free(raw);
     return STRING;
 }
+"i32"                 return I32;
+"void"                return VOID;
+"ptr"                 return PTR;
+"i64"                 return I64;
+"f32"                 return F32;
+"f64"                 return F64;
+"..."                 return ELLIPSIS;
 [a-zA-Z_][a-zA-Z0-9_]* { yylval.str = strdup(yytext); return IDENTIFIER; }
 "+"                   return '+';
 "-"                   return '-';
