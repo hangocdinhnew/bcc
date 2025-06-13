@@ -113,7 +113,7 @@ type:
 
 base_type:
     I32 { $$ = strdup("i32"); }
-  | F64 { $$ = strdup("i64"); }
+  | I64 { $$ = strdup("i64"); }
   | F32 { $$ = strdup("f32"); }
   | F64 { $$ = strdup("f64"); }
   | VOID { $$ = strdup("void"); }
