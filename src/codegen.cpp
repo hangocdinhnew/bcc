@@ -126,7 +126,7 @@ llvm::Function *FunctionAST::codegen() {
 
   if (BB->getTerminator()) {
     if (retTy->isVoidTy()) {
-      Builder.CreateRetVoid();
+      throw std::runtime_error("Void function cannot return!");
     }
   }
 
