@@ -188,6 +188,16 @@ statement:
   | RETURN expression ';' {
       $$ = new bcc::ReturnExprAST(std::unique_ptr<bcc::ExprAST>($2));
   }
+  | type IDENTIFIER ';' {
+      $$ = new bcc::VarDeclExprAST($2, $1);
+      free($1);
+      free($2);
+  }
+  | type IDENTIFIER '=' expression ';' {
+      $$ = new bcc::VarDeclExprAST($2, $1, std::unique_ptr<bcc::ExprAST>($4));
+      free($1);
+      free($2);
+  }
 ;
 
 expr_list:
@@ -198,14 +208,17 @@ expr_list:
 expression:
     NUMBER                         { $$ = new bcc::NumberExprAST($1); }
   | STRING                         { $$ = new bcc::StringLiteralExprAST($1); }
-  | IDENTIFIER '(' expr_list ')' { 
+  | IDENTIFIER '(' expr_list ')'   { 
       std::vector<std::unique_ptr<bcc::ExprAST>> argsVec;
       for (auto *arg : *$3) argsVec.emplace_back(arg);
       delete $3;
       $$ = new bcc::CallExprAST($1, std::move(argsVec));
     }
-  | IDENTIFIER '(' ')' {
+  | IDENTIFIER '(' ')'             {
       $$ = new bcc::CallExprAST($1, {});
+    }
+  | IDENTIFIER                     {
+      $$ = new bcc::VariableExprAST($1);
     }
   | expression '+' expression      { $$ = new bcc::BinaryExprAST('+',
                                         std::unique_ptr<bcc::ExprAST>($1),

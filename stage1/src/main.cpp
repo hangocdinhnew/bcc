@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
 
   if (runIt) {
 #ifdef _WIN32
-    std::string execCmd = ".\" + outFile;
+    std::string execCmd = ".\\" + outFile;
 #else
     std::string execCmd = "./" + outFile;
 #endif

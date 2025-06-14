@@ -28,10 +28,22 @@ llvm::Value *NumberExprAST::codegen() {
 }
 
 llvm::Value *VariableExprAST::codegen() {
-  auto V = NamedValues[Name];
-  if (!V) {
-    throw std::runtime_error("Unknown variable name");
+  auto *V = NamedValues[Name];
+  if (!V)
+    throw std::runtime_error("Unknown variable name: " + Name);
+
+  if (V->getType()->isPointerTy()) {
+    llvm::Type *loadTy = nullptr;
+    if (auto *alloca = llvm::dyn_cast<llvm::AllocaInst>(V)) {
+      loadTy = alloca->getAllocatedType();
+    }
+
+    if (!loadTy)
+      throw std::runtime_error("Cannot determine load type for: " + Name);
+
+    return Builder.CreateLoad(loadTy, V, llvm::Twine(Name) + "_val");
   }
+
   return V;
 }
 
@@ -98,15 +110,16 @@ llvm::Function *FunctionAST::codegen() {
     paramTypes.push_back(getLLVMTypeFor(argType, ctx));
   }
 
-  llvm::FunctionType *fnType = llvm::FunctionType::get(retTy, paramTypes, false);
+  llvm::FunctionType *fnType =
+      llvm::FunctionType::get(retTy, paramTypes, false);
 
   llvm::Function *function = TheModule->getFunction(Name);
   if (function) {
     if (!function->empty())
       throw std::runtime_error("Function redefinition: " + Name);
   } else {
-    function = llvm::Function::Create(
-        fnType, llvm::Function::ExternalLinkage, Name, TheModule.get());
+    function = llvm::Function::Create(fnType, llvm::Function::ExternalLinkage,
+                                      Name, TheModule.get());
   }
 
   FunctionProtos[Name] = function;
@@ -126,7 +139,7 @@ llvm::Function *FunctionAST::codegen() {
   CurrentFunction = nullptr;
 
   if (BB->getTerminator()) {
-    if(retTy->isVoidTy()) {
+    if (retTy->isVoidTy()) {
       throw std::runtime_error("Void function calls return: " + Name);
     }
   }
@@ -135,7 +148,8 @@ llvm::Function *FunctionAST::codegen() {
     if (retTy->isVoidTy()) {
       Builder.CreateRetVoid();
     } else {
-      throw std::runtime_error("Non-void function missing return statement: " + Name);
+      throw std::runtime_error("Non-void function missing return statement: " +
+                               Name);
     }
   }
 
@@ -145,7 +159,8 @@ llvm::Function *FunctionAST::codegen() {
 llvm::Value *CallExprAST::codegen() {
   llvm::Function *calleeF = FunctionProtos[Callee];
   if (!calleeF)
-    throw std::runtime_error("Implicit declaration of function not allowed: " + Callee);
+    throw std::runtime_error("Implicit declaration of function not allowed: " +
+                             Callee);
 
   std::vector<llvm::Value *> argsV;
   for (auto &arg : Args)
@@ -233,5 +248,26 @@ llvm::Value *PositionalParamExprAST::codegen() {
     throw std::runtime_error("Invalid positional param index");
 
   return &*args;
+}
+
+llvm::Value *VarDeclExprAST::codegen() {
+  llvm::Type *llvmType = getLLVMTypeFor(Type, TheContext);
+  llvm::Function *func = Builder.GetInsertBlock()->getParent();
+
+  llvm::IRBuilder<> tmpBuilder(&func->getEntryBlock(),
+                               func->getEntryBlock().begin());
+  llvm::AllocaInst *alloca = tmpBuilder.CreateAlloca(llvmType, nullptr, Name);
+
+  if (InitExpr) {
+    llvm::Value *initVal = InitExpr->codegen();
+    if (initVal->getType() != llvmType) {
+      throw std::runtime_error("Initializer type mismatch for " + Name);
+    }
+    Builder.CreateStore(initVal, alloca);
+  }
+
+  NamedValues[Name] = alloca;
+
+  return alloca;
 }
 } // namespace bcc

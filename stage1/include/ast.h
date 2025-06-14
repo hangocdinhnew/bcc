@@ -119,4 +119,18 @@ public:
   PositionalParamExprAST(int idx) : Index(idx) {}
   llvm::Value *codegen() override;
 };
+
+class VarDeclExprAST : public ExprAST {
+  std::string Name;
+  std::string Type;
+  std::unique_ptr<ExprAST> InitExpr;
+
+public:
+  VarDeclExprAST(std::string name, std::string type,
+                 std::unique_ptr<ExprAST> init = nullptr)
+      : Name(std::move(name)), Type(std::move(type)),
+        InitExpr(std::move(init)) {}
+
+  llvm::Value *codegen() override;
+};
 } // namespace bcc
