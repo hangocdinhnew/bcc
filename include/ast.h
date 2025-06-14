@@ -2,121 +2,75 @@
 
 // clang-format off
 #include <memory>
-#include <string>
 #include <vector>
-#include <llvm/IR/Value.h>
+#include <string>
 // clang-format on
 
-namespace bcc {
-class ExprAST {
-public:
-  virtual ~ExprAST() = default;
-  virtual llvm::Value *codegen() = 0;
+struct ExprAST {
+    virtual ~ExprAST() = default;
 };
 
-class NumberExprAST : public ExprAST {
-  double Val;
-
-public:
-  NumberExprAST(double Val) : Val(Val) {}
-  llvm::Value *codegen() override;
+struct NumberExprAST : ExprAST {
+    double val;
+    NumberExprAST(double val) : val(val) {}
 };
 
-class VariableExprAST : public ExprAST {
-  std::string Name;
-
-public:
-  VariableExprAST(const std::string &Name) : Name(Name) {}
-  llvm::Value *codegen() override;
+struct PositionalParamExprAST : ExprAST {
+    int index;
+    PositionalParamExprAST(int index) : index(index) {}
 };
 
-class BinaryExprAST : public ExprAST {
-  char Op;
-  std::unique_ptr<ExprAST> LHS, RHS;
-
-public:
-  BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-                std::unique_ptr<ExprAST> RHS)
-      : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
-  llvm::Value *codegen() override;
+struct BinaryExprAST : ExprAST {
+    char op;
+    std::unique_ptr<ExprAST> lhs, rhs;
+    BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs)
+        : op(op), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
 };
 
-class StringLiteralExprAST : public ExprAST {
-  std::string Val;
-
-public:
-  StringLiteralExprAST(const std::string &val);
-  ~StringLiteralExprAST() = default;
-  llvm::Value *codegen() override;
+struct StringLiteralExprAST : ExprAST {
+    std::string val;
+    StringLiteralExprAST(const std::string& val) : val(val) {}
 };
 
-class BlockAST : public ExprAST {
-  std::vector<std::unique_ptr<ExprAST>> Statements;
-
-public:
-  BlockAST(std::vector<std::unique_ptr<ExprAST>> stmts)
-      : Statements(std::move(stmts)) {}
-
-  llvm::Value *codegen() override {
-    for (auto &stmt : Statements)
-      stmt->codegen();
-    return nullptr;
-  }
+struct BlockAST : ExprAST {
+    std::vector<std::unique_ptr<ExprAST>> statements;
 };
 
-class FunctionAST {
-  std::string Name;
-  std::string RetType;
-  std::vector<std::string> ArgTypes;
-  std::unique_ptr<BlockAST> Body;
-
-public:
-  FunctionAST(std::string Name, std::string RetType,
-              std::vector<std::string> ArgTypes, std::unique_ptr<BlockAST> Body)
-      : Name(std::move(Name)), RetType(std::move(RetType)),
-        ArgTypes(std::move(ArgTypes)), Body(std::move(Body)) {}
-
-  std::string getName() { return Name; }
-
-  llvm::Function *codegen();
+struct CallExprAST : ExprAST {
+    std::string callee;
+    std::vector<std::unique_ptr<ExprAST>> args;
+    CallExprAST(const std::string& callee, std::vector<std::unique_ptr<ExprAST>> args)
+        : callee(callee), args(std::move(args)) {}
 };
 
-class CallExprAST : public ExprAST {
-  std::string Callee;
-  std::vector<std::unique_ptr<ExprAST>> Args;
-
-public:
-  CallExprAST(const std::string &Callee,
-              std::vector<std::unique_ptr<ExprAST>> Args = {})
-      : Callee(Callee), Args(std::move(Args)) {}
-  llvm::Value *codegen() override;
+struct ReturnExprAST : ExprAST {
+    std::unique_ptr<ExprAST> expr;
+    ReturnExprAST(std::unique_ptr<ExprAST> expr) : expr(std::move(expr)) {}
 };
 
-class ExternAST {
-  std::string Name;
-  std::string RetType;
-  std::vector<std::string> ArgTypes;
-
-public:
-  ExternAST(const std::string &Name, const std::string &RetType,
-            const std::vector<std::string> &Args)
-      : Name(Name), RetType(RetType), ArgTypes(Args) {}
-  llvm::Function *codegen();
+struct FunctionAST {
+    std::string name;
+    std::string retType;
+    std::vector<std::string> argTypes;
+    std::unique_ptr<BlockAST> body;
+    
+    FunctionAST(std::string name, std::string retType, 
+                std::vector<std::string> argTypes, std::unique_ptr<BlockAST> body)
+        : name(std::move(name)), retType(std::move(retType)), 
+          argTypes(std::move(argTypes)), body(std::move(body)) {}
 };
 
-class ReturnExprAST : public ExprAST {
-  std::unique_ptr<ExprAST> Expr;
-
-public:
-  ReturnExprAST(std::unique_ptr<ExprAST> expr) : Expr(std::move(expr)) {}
-  llvm::Value *codegen() override;
+struct ExternAST {
+    std::string name;
+    std::string retType;
+    std::vector<std::string> argTypes;
+    
+    ExternAST(std::string name, std::string retType, std::vector<std::string> argTypes)
+        : name(std::move(name)), retType(std::move(retType)), 
+          argTypes(std::move(argTypes)) {}
 };
 
-class PositionalParamExprAST : public ExprAST {
-  int Index;
-
-public:
-  PositionalParamExprAST(int idx) : Index(idx) {}
-  llvm::Value *codegen() override;
+struct ProgramAST {
+    std::vector<std::unique_ptr<ExternAST>> externs;
+    std::vector<std::unique_ptr<FunctionAST>> functions;
 };
-} // namespace bcc
