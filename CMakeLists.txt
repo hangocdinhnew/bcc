@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
+option(CMAKE_EXPORT_COMPILE_COMMANDS "Exports compile_commands.json" ON)
+
 project(bcc)
 
 set(CMAKE_CXX_STANDARD 17)
