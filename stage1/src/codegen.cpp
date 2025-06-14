@@ -113,7 +113,6 @@ llvm::Function *FunctionAST::codegen() {
 
   auto BB = llvm::BasicBlock::Create(ctx, "entry", function);
   Builder.SetInsertPoint(BB);
-  // Set up NamedValues for function arguments
   NamedValues.clear();
   unsigned idx = 0;
   for (auto &arg : function->args()) {
@@ -146,7 +145,7 @@ llvm::Function *FunctionAST::codegen() {
 llvm::Value *CallExprAST::codegen() {
   llvm::Function *calleeF = FunctionProtos[Callee];
   if (!calleeF)
-    throw std::runtime_error("Unknown function referenced: " + Callee);
+    throw std::runtime_error("Implicit declaration of function not allowed: " + Callee);
 
   std::vector<llvm::Value *> argsV;
   for (auto &arg : Args)
