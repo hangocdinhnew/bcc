@@ -1,25 +1,29 @@
 #pragma once
 
 // clang-format off
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Value.h>
-#include <llvm/IR/Verifier.h>
+#include <string>
+#include <vector>
 #include <map>
 #include "ast.h"
 // clang-format on
 
-namespace bcc {
-extern llvm::LLVMContext TheContext;
-extern llvm::IRBuilder<> Builder;
-extern std::unique_ptr<llvm::Module> TheModule;
-extern llvm::FunctionCallee PrintfFunc;
-llvm::FunctionCallee declarePrintf();
-extern std::vector<std::unique_ptr<ExternAST>> externs;
-extern std::vector<std::unique_ptr<bcc::FunctionAST>> functions;
-extern std::map<std::string, llvm::Function *> FunctionProtos;
-uint32_t fnv1a(const std::string &str);
+class CodeGenerator {
+public:
+  std::string generate(const ProgramAST &program);
 
-llvm::Type *getLLVMTypeFor(const std::string &typeStr, llvm::LLVMContext &ctx);
-} // namespace bcc
+private:
+  std::string m_output;
+  std::map<std::string, std::string> m_stringLiterals;
+  int m_stringCounter = 0;
+  int m_labelCounter = 0;
+  int m_stackOffset = 0;
+
+  void generateExtern(const ExternAST &ext);
+  void generateFunction(const FunctionAST &func);
+  void generateStatement(ExprAST *stmt);
+  std::string generateExpression(ExprAST *expr);
+  std::string generateCall(const CallExprAST &call);
+  void resetState();
+
+  std::string m_currentFunctionName;
+};
