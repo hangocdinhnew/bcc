@@ -4,13 +4,16 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <llvm/IR/Value.h>
+#include <llvm-c/Core.h>
+#include <llvm-c/Analysis.h>
+#include <llvm-c/ExecutionEngine.h>
 // clang-format on
 
 class ExprAST {
 public:
   virtual ~ExprAST() = default;
-  virtual llvm::Value *codegen() = 0;
+  virtual LLVMValueRef codegen(LLVMModuleRef module,
+                               LLVMBuilderRef builder) = 0;
 };
 
 class NumberExprAST : public ExprAST {
@@ -18,7 +21,7 @@ class NumberExprAST : public ExprAST {
 
 public:
   NumberExprAST(double Val) : Val(Val) {}
-  llvm::Value *codegen() override;
+  LLVMValueRef codegen(LLVMModuleRef module, LLVMBuilderRef builder) override;
 };
 
 class VariableExprAST : public ExprAST {
@@ -26,7 +29,7 @@ class VariableExprAST : public ExprAST {
 
 public:
   VariableExprAST(const std::string &Name) : Name(Name) {}
-  llvm::Value *codegen() override;
+  LLVMValueRef codegen(LLVMModuleRef module, LLVMBuilderRef builder) override;
 };
 
 class BinaryExprAST : public ExprAST {
@@ -37,16 +40,16 @@ public:
   BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
-  llvm::Value *codegen() override;
+  LLVMValueRef codegen(LLVMModuleRef module, LLVMBuilderRef builder) override;
 };
 
 class StringLiteralExprAST : public ExprAST {
   std::string Val;
 
 public:
-  StringLiteralExprAST(const std::string &val);
+  StringLiteralExprAST(const std::string &val) : Val(val) {}
   ~StringLiteralExprAST() = default;
-  llvm::Value *codegen() override;
+  LLVMValueRef codegen(LLVMModuleRef module, LLVMBuilderRef builder) override;
 };
 
 class BlockAST : public ExprAST {
@@ -56,9 +59,9 @@ public:
   BlockAST(std::vector<std::unique_ptr<ExprAST>> stmts)
       : Statements(std::move(stmts)) {}
 
-  llvm::Value *codegen() override {
+  LLVMValueRef codegen(LLVMModuleRef module, LLVMBuilderRef builder) override {
     for (auto &stmt : Statements)
-      stmt->codegen();
+      stmt->codegen(module, builder);
     return nullptr;
   }
 };
@@ -77,7 +80,7 @@ public:
 
   std::string getName() { return Name; }
 
-  llvm::Function *codegen();
+  LLVMValueRef codegen(LLVMModuleRef module, LLVMBuilderRef builder);
 };
 
 class CallExprAST : public ExprAST {
@@ -88,7 +91,7 @@ public:
   CallExprAST(const std::string &Callee,
               std::vector<std::unique_ptr<ExprAST>> Args = {})
       : Callee(Callee), Args(std::move(Args)) {}
-  llvm::Value *codegen() override;
+  LLVMValueRef codegen(LLVMModuleRef module, LLVMBuilderRef builder) override;
 };
 
 class ExternAST {
@@ -100,7 +103,7 @@ public:
   ExternAST(const std::string &Name, const std::string &RetType,
             const std::vector<std::string> &Args)
       : Name(Name), RetType(RetType), ArgTypes(Args) {}
-  llvm::Function *codegen();
+  LLVMValueRef codegen(LLVMModuleRef module);
 };
 
 class ReturnExprAST : public ExprAST {
@@ -108,7 +111,7 @@ class ReturnExprAST : public ExprAST {
 
 public:
   ReturnExprAST(std::unique_ptr<ExprAST> expr) : Expr(std::move(expr)) {}
-  llvm::Value *codegen() override;
+  LLVMValueRef codegen(LLVMModuleRef module, LLVMBuilderRef builder) override;
 };
 
 class PositionalParamExprAST : public ExprAST {
@@ -116,7 +119,7 @@ class PositionalParamExprAST : public ExprAST {
 
 public:
   PositionalParamExprAST(int idx) : Index(idx) {}
-  llvm::Value *codegen() override;
+  LLVMValueRef codegen(LLVMModuleRef module, LLVMBuilderRef builder) override;
 };
 
 class VarDeclExprAST : public ExprAST {
@@ -130,5 +133,5 @@ public:
       : Name(std::move(name)), Type(std::move(type)),
         InitExpr(std::move(init)) {}
 
-  llvm::Value *codegen() override;
+  LLVMValueRef codegen(LLVMModuleRef module, LLVMBuilderRef builder) override;
 };

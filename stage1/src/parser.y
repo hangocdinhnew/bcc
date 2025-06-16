@@ -49,6 +49,7 @@
   #include <cstdio>
   #include <cstdlib>
   #include <iostream>
+  #include <cstring>
   #include "ast.h"
   #include "codegen.h"
 
@@ -89,7 +90,7 @@ extrn_decl:
     EXTRN type IDENTIFIER '(' param_list ')' ';' {
       auto typeList = extractTypes(*$5);
       $$ = new ExternAST($3, $2, typeList);
-      $$->codegen();
+      $$->codegen(TheModule);
       free($2);
       free($3);
       delete $5;
@@ -158,7 +159,7 @@ function_def:
         std::make_unique<BlockAST>(std::move(*$6))
       );
       $$ = func;
-      $$->codegen();
+      $$->codegen(TheModule, Builder);
       delete $4;
     }
 ;

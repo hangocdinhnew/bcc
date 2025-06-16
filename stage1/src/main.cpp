@@ -1,36 +1,35 @@
 // clang-format off
 #include <iostream>
 #include <fstream>
-#include <llvm/Support/CodeGen.h>
 #include <sstream>
 #include <string>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <FlexLexer.h>
+#include "ast.h"
 #include "codegen.h"
 #include "parser.tab.h"
-#include <llvm/Support/FileSystem.h>
-#include <llvm/Support/raw_ostream.h>
-#include <llvm/Target/TargetMachine.h>
-#include <llvm/MC/TargetRegistry.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Support/FormattedStream.h>
-#include <llvm/TargetParser/Host.h>
-#include <llvm/IR/LegacyPassManager.h>
-#include <llvm/IR/Verifier.h>
+
+#include <llvm-c/Core.h>
+#include <llvm-c/Analysis.h>
+#include <llvm-c/Target.h>
+#include <llvm-c/TargetMachine.h>
+#include <llvm-c/BitWriter.h>
 // clang-format on
 
 extern int yyparse();
 extern std::unique_ptr<ExprAST> root;
+std::vector<std::unique_ptr<ExprAST>> externs;
+std::vector<std::unique_ptr<FunctionAST>> functions;
 
 yyFlexLexer lexer;
 int yylex() { return lexer.yylex(); }
 
 int main(int argc, char **argv) {
-  llvm::InitializeNativeTarget();
-  llvm::InitializeNativeTargetAsmPrinter();
-  llvm::InitializeNativeTargetAsmParser();
+  LLVMInitializeNativeTarget();
+  LLVMInitializeNativeAsmPrinter();
+  LLVMInitializeNativeAsmParser();
 
   std::string inputFile;
   std::string outFile;
@@ -66,14 +65,14 @@ int main(int argc, char **argv) {
   }
 
   if (inputFile.empty()) {
-    std::cerr << "Usage: bcc [options] <file.b>\n"
-              << "Options:\n"
-              << "\t--emit-only-ir | -ir\t\tEmit IR and exit (no compilation)\n"
-              << "\t--run\t\t\t\tRun the compiled binary\n"
-              << "\t--out | -o <filename>\t\tSet output binary name (default: "
-                 "out)\n"
-              << "\t--no-cleanup\t\t\tDoesn't remove all of the IR files\n"
-              << "\t--compile-only | -C\t\tOnly compiles without linking.\n";
+    std::cerr
+        << "Usage: bcc [options] <file.b>\n"
+        << "Options:\n"
+        << "\t--emit-only-ir | -ir\t\tEmit IR and exit (no compilation)\n"
+        << "\t--run\t\t\t\tRun the compiled binary\n"
+        << "\t--out | -o <filename>\t\tSet output binary name (default: out)\n"
+        << "\t--no-cleanup\t\t\tDoesn't remove all of the IR files\n"
+        << "\t--compile-only | -C\t\tOnly compiles without linking.\n";
     return 1;
   }
 
@@ -85,64 +84,60 @@ int main(int argc, char **argv) {
 
   std::string code((std::istreambuf_iterator<char>(in)),
                    std::istreambuf_iterator<char>());
-
   std::istringstream input(code);
+
+  TheContext = LLVMContextCreate();
+  TheModule = LLVMModuleCreateWithNameInContext("B+ Compiler", TheContext);
+  Builder = LLVMCreateBuilderInContext(TheContext);
+
   lexer.switch_streams(&input, nullptr);
   yyparse();
 
   for (auto &ext : externs) {
-    ext->codegen();
+    ext->codegen(TheModule, Builder);
   }
 
   for (auto &func : functions) {
-    func->codegen();
+    func->codegen(TheModule, Builder);
+  }
+
+  char *errStr = nullptr;
+  if (LLVMVerifyModule(TheModule, LLVMPrintMessageAction, &errStr)) {
+    std::cerr << "Generated IR is invalid: " << errStr << "\n";
+    LLVMDisposeMessage(errStr);
+    return 1;
   }
 
   if (emitOnlyIR) {
-    std::error_code ec;
     std::string irFileName = outFile + ".ll";
-    llvm::raw_fd_ostream irOut(irFileName, ec, llvm::sys::fs::OF_None);
-
-    if (ec) {
-      std::cerr << "Could not open IR file for writing! Error: " << ec.message()
-                << "\n";
+    if (LLVMPrintModuleToFile(TheModule, irFileName.c_str(), &errStr)) {
+      std::cerr << "Could not write IR to file: " << errStr << "\n";
+      LLVMDisposeMessage(errStr);
       return 1;
     }
-
-    TheModule->print(irOut, nullptr);
-    irOut.flush();
-
     std::cout << "Successfully emitted IR: " << irFileName << "\n";
+    LLVMDisposeBuilder(Builder);
+    LLVMDisposeModule(TheModule);
+    LLVMContextDispose(TheContext);
     return 0;
   }
 
-  if (llvm::verifyModule(*TheModule, &llvm::errs())) {
-    throw std::runtime_error("Generated IR is invalid!");
-  }
+  std::string targetTriple = LLVMGetDefaultTargetTriple();
+  LLVMSetTarget(TheModule, targetTriple.c_str());
 
-  if (!FunctionProtos.count("main")) {
-    std::cerr << "Error: main function not found in prototypes!\n";
+  char *error = nullptr;
+  LLVMTargetRef target;
+  if (LLVMGetTargetFromTriple(targetTriple.c_str(), &target, &error)) {
+    std::cerr << "Failed to lookup target: " << error << "\n";
+    LLVMDisposeMessage(error);
     return 1;
   }
 
-  auto targetTriple = llvm::sys::getDefaultTargetTriple();
-  TheModule->setTargetTriple(targetTriple);
+  LLVMTargetMachineRef tm = LLVMCreateTargetMachine(
+      target, targetTriple.c_str(), "generic", "", LLVMCodeGenLevelDefault,
+      LLVMRelocPIC, LLVMCodeModelDefault);
 
-  std::string error;
-  auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
-  if (!target) {
-    std::cerr << "Failed to lookup target! Error: " << error << "\n";
-    return 1;
-  }
-
-  auto cpu = "generic";
-  auto features = "";
-
-  llvm::TargetOptions opt;
-  auto RM = llvm::Reloc::PIC_;
-  auto targetMachine =
-      target->createTargetMachine(targetTriple, cpu, features, opt, RM);
-  TheModule->setDataLayout(targetMachine->createDataLayout());
+  LLVMSetModuleDataLayout(TheModule, LLVMCreateTargetDataLayout(tm));
 
 #ifdef _WIN32
   std::string objFileName = outFile + ".obj";
@@ -150,26 +145,15 @@ int main(int argc, char **argv) {
   std::string objFileName = outFile + ".o";
 #endif
 
-  std::error_code ec;
-  llvm::raw_fd_ostream dest(objFileName, ec, llvm::sys::fs::OF_None);
-
-  if (ec) {
-    std::cerr << "Could not open file! Error: " << ec.message() << "\n";
+  if (LLVMTargetMachineEmitToFile(tm, TheModule, objFileName.c_str(),
+                                  LLVMObjectFile, &error)) {
+    std::cerr << "Could not emit object file: " << error << "\n";
+    LLVMDisposeMessage(error);
     return 1;
   }
 
-  llvm::legacy::PassManager pass;
-  if (targetMachine->addPassesToEmitFile(pass, dest, nullptr,
-                                         llvm::CodeGenFileType::ObjectFile)) {
-    std::cerr << "TargetMachine can't emit a file of this type!\n";
-  }
-
-  pass.run(*TheModule);
-  dest.flush();
-
   if (!compileOnly) {
     std::string linkCmd = "clang " + objFileName + " -o " + outFile;
-
     int linkResult = system(linkCmd.c_str());
     if (linkResult != 0) {
       std::cerr << "Linking failed!\n";
@@ -183,9 +167,15 @@ int main(int argc, char **argv) {
 #else
     std::string execCmd = "./" + outFile;
 #endif
-
-        return system(execCmd.c_str());
+    return system(execCmd.c_str());
   }
+
+  LLVMDisposeBuilder(Builder);
+  LLVMDisposeModule(TheModule);
+  LLVMDisposeTargetMachine(tm);
+  LLVMContextDispose(TheContext);
+  LLVMDisposeMessage(error);
+  LLVMDisposeMessage(errStr);
 
   return 0;
 }

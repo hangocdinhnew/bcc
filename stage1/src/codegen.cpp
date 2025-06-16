@@ -1,174 +1,225 @@
 // clang-format off
 #include "ast.h"
 #include "codegen.h"
-#include <llvm/IR/Constants.h>
 #include <map>
 #include <iostream>
 // clang-format on
 
-llvm::LLVMContext TheContext;
-llvm::IRBuilder<> Builder(TheContext);
-std::unique_ptr<llvm::Module> TheModule =
-    std::make_unique<llvm::Module>("B+ Compiler", TheContext);
-std::map<std::string, llvm::Function *> FunctionProtos;
-std::vector<std::unique_ptr<ExternAST>> externs;
-std::vector<std::unique_ptr<FunctionAST>> functions;
+LLVMContextRef TheContext = nullptr;
+LLVMBuilderRef Builder = nullptr;
+LLVMModuleRef TheModule = nullptr;
+struct FunctionProtoInfo {
+  LLVMValueRef FuncVal;
+  LLVMTypeRef FuncType;
+};
 
-static std::map<std::string, llvm::Value *> NamedValues;
+std::map<std::string, FunctionProtoInfo> FunctionProtos;
+static std::map<std::string, LLVMValueRef> NamedValues;
 static thread_local FunctionAST *CurrentFunction = nullptr;
 
-llvm::Value *NumberExprAST::codegen() {
+LLVMValueRef NumberExprAST::codegen(LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
   if (Val == (int64_t)Val) {
-    return llvm::ConstantInt::get(TheContext,
-                                  llvm::APInt(32, (int64_t)Val, true));
+    return LLVMConstInt(LLVMInt32TypeInContext(TheContext), (int64_t)Val, 1);
   } else {
-    return llvm::ConstantFP::get(TheContext, llvm::APFloat(Val));
+    return LLVMConstReal(LLVMDoubleTypeInContext(TheContext), Val);
   }
 }
 
-llvm::Value *VariableExprAST::codegen() {
-  auto *V = NamedValues[Name];
-  if (!V)
+LLVMValueRef VariableExprAST::codegen(LLVMModuleRef module,
+                                      LLVMBuilderRef builder) {
+  LLVMValueRef V = NamedValues[Name];
+  if (!V) {
     throw std::runtime_error("Unknown variable name: " + Name);
+  }
 
-  if (V->getType()->isPointerTy()) {
-    llvm::Type *loadTy = nullptr;
-    if (auto *alloca = llvm::dyn_cast<llvm::AllocaInst>(V)) {
-      loadTy = alloca->getAllocatedType();
+  LLVMTypeRef vTy = LLVMTypeOf(V);
+  if (LLVMGetTypeKind(vTy) == LLVMPointerTypeKind) {
+    LLVMTypeRef loadTy = nullptr;
+
+    if (LLVMIsAAllocaInst(V)) {
+      loadTy = LLVMGetAllocatedType(V);
+    } else {
+      loadTy = LLVMGetElementType(vTy);
     }
 
-    if (!loadTy)
+    if (!loadTy) {
       throw std::runtime_error("Cannot determine load type for: " + Name);
+    }
 
-    return Builder.CreateLoad(loadTy, V, llvm::Twine(Name) + "_val");
+    return LLVMBuildLoad2(builder, loadTy, V, (Name + "_val").c_str());
   }
 
   return V;
 }
 
-llvm::Value *BinaryExprAST::codegen() {
-  auto L = LHS->codegen();
-  auto R = RHS->codegen();
+LLVMValueRef BinaryExprAST::codegen(LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  LLVMValueRef L = LHS->codegen(module, builder);
+  LLVMValueRef R = RHS->codegen(module, builder);
 
-  if (L->getType()->isFloatingPointTy() || R->getType()->isFloatingPointTy()) {
-    // If either side is float, promote and do fadd
-    if (L->getType()->isIntegerTy())
-      L = Builder.CreateSIToFP(L, llvm::Type::getDoubleTy(TheContext),
-                               "int_to_double");
-    if (R->getType()->isIntegerTy())
-      R = Builder.CreateSIToFP(R, llvm::Type::getDoubleTy(TheContext),
-                               "int_to_double");
+  LLVMTypeKind lTypeKind = LLVMGetTypeKind(LLVMTypeOf(L));
+  LLVMTypeKind rTypeKind = LLVMGetTypeKind(LLVMTypeOf(R));
+
+  bool lIsFP =
+      (lTypeKind == LLVMFloatTypeKind || lTypeKind == LLVMDoubleTypeKind);
+  bool rIsFP =
+      (rTypeKind == LLVMFloatTypeKind || rTypeKind == LLVMDoubleTypeKind);
+
+  if (lIsFP || rIsFP) {
+    if (!lIsFP)
+      L = LLVMBuildSIToFP(builder, L, LLVMDoubleTypeInContext(TheContext),
+                          "int_to_double");
+    if (!rIsFP)
+      R = LLVMBuildSIToFP(builder, R, LLVMDoubleTypeInContext(TheContext),
+                          "int_to_double");
 
     switch (Op) {
     case '+':
-      return Builder.CreateFAdd(L, R, "addtmp");
+      return LLVMBuildFAdd(builder, L, R, "addtmp");
     case '-':
-      return Builder.CreateFSub(L, R, "subtmp");
+      return LLVMBuildFSub(builder, L, R, "subtmp");
     case '*':
-      return Builder.CreateFMul(L, R, "multmp");
+      return LLVMBuildFMul(builder, L, R, "multmp");
     case '/':
-      return Builder.CreateFDiv(L, R, "divtmp");
-    default:
-      throw std::runtime_error("invalid binary operator");
-    }
-  } else if (L->getType()->isIntegerTy(32) && R->getType()->isIntegerTy(32)) {
-    switch (Op) {
-    case '+':
-      return Builder.CreateAdd(L, R, "addtmp");
-    case '-':
-      return Builder.CreateSub(L, R, "subtmp");
-    case '*':
-      return Builder.CreateMul(L, R, "multmp");
-    case '/':
-      return Builder.CreateSDiv(L, R, "divtmp");
+      return LLVMBuildFDiv(builder, L, R, "divtmp");
     default:
       throw std::runtime_error("invalid binary operator");
     }
   } else {
-    throw std::runtime_error("Unsupported operand types for binary operator");
+    switch (Op) {
+    case '+':
+      return LLVMBuildAdd(builder, L, R, "addtmp");
+    case '-':
+      return LLVMBuildSub(builder, L, R, "subtmp");
+    case '*':
+      return LLVMBuildMul(builder, L, R, "multmp");
+    case '/':
+      return LLVMBuildSDiv(builder, L, R, "divtmp");
+    default:
+      throw std::runtime_error("invalid binary operator");
+    }
   }
 }
 
-llvm::Value *StringLiteralExprAST::codegen() {
+LLVMValueRef StringLiteralExprAST::codegen(LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
   uint32_t hashValue = fnv1a(Val);
   std::string strname = "str." + std::to_string(hashValue);
-
-  return Builder.CreateGlobalString(Val, strname, 0, TheModule.get());
+  return LLVMBuildGlobalStringPtr(builder, Val.c_str(), strname.c_str());
 }
 
-StringLiteralExprAST::StringLiteralExprAST(const std::string &val) : Val(val) {}
+LLVMValueRef ExternAST::codegen(LLVMModuleRef module) {
+  LLVMTypeRef retTy = getLLVMTypeFor(RetType);
 
-llvm::Function *FunctionAST::codegen() {
-  CurrentFunction = this;
-  auto &ctx = TheContext;
+  std::vector<LLVMTypeRef> argTys;
+  bool isVarArg = false;
 
-  llvm::Type *retTy = getLLVMTypeFor(RetType, ctx);
-
-  std::vector<llvm::Type *> paramTypes;
-  for (const auto &argType : ArgTypes) {
-    paramTypes.push_back(getLLVMTypeFor(argType, ctx));
-  }
-
-  llvm::FunctionType *fnType =
-      llvm::FunctionType::get(retTy, paramTypes, false);
-
-  llvm::Function *function = TheModule->getFunction(Name);
-  if (function) {
-    if (!function->empty())
-      throw std::runtime_error("Function redefinition: " + Name);
-  } else {
-    function = llvm::Function::Create(fnType, llvm::Function::ExternalLinkage,
-                                      Name, TheModule.get());
-  }
-
-  FunctionProtos[Name] = function;
-
-  auto BB = llvm::BasicBlock::Create(ctx, "entry", function);
-  Builder.SetInsertPoint(BB);
-  NamedValues.clear();
-  unsigned idx = 0;
-  for (auto &arg : function->args()) {
-    arg.setName("arg" + std::to_string(idx + 1));
-    NamedValues["%" + std::to_string(idx + 1)] = &arg;
-    idx++;
-  }
-
-  Body->codegen();
-
-  CurrentFunction = nullptr;
-
-  if (BB->getTerminator()) {
-    if (retTy->isVoidTy()) {
-      throw std::runtime_error("Void function calls return: " + Name);
+  for (const std::string &arg : ArgTypes) {
+    if (arg == "...") {
+      isVarArg = true;
+    } else {
+      argTys.push_back(getLLVMTypeFor(arg));
     }
   }
 
-  if (!BB->getTerminator()) {
-    if (retTy->isVoidTy()) {
-      Builder.CreateRetVoid();
+  LLVMTypeRef funcType =
+      LLVMFunctionType(retTy, argTys.data(), argTys.size(), isVarArg);
+  LLVMValueRef func = LLVMAddFunction(module, Name.c_str(), funcType);
+  FunctionProtos[Name] = {func, funcType};
+
+  return func;
+}
+
+LLVMValueRef ReturnExprAST::codegen(LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  if (Expr) {
+    LLVMValueRef val = Expr->codegen(module, builder);
+    LLVMBuildRet(builder, val);
+  } else {
+    LLVMBuildRetVoid(builder);
+  }
+  return nullptr;
+}
+
+LLVMValueRef FunctionAST::codegen(LLVMModuleRef module,
+                                  LLVMBuilderRef builder) {
+  CurrentFunction = this;
+  LLVMTypeRef retTy = getLLVMTypeFor(RetType);
+
+  std::vector<LLVMTypeRef> paramTypes;
+  for (const std::string &argType : ArgTypes)
+    paramTypes.push_back(getLLVMTypeFor(argType));
+
+  LLVMTypeRef fnType =
+      LLVMFunctionType(retTy, paramTypes.data(), paramTypes.size(), 0);
+  LLVMValueRef function = LLVMGetNamedFunction(module, Name.c_str());
+  if (function) {
+    if (LLVMCountBasicBlocks(function) != 0)
+      throw std::runtime_error("Function redefinition: " + Name);
+  } else {
+    function = LLVMAddFunction(module, Name.c_str(), fnType);
+  }
+
+  FunctionProtos[Name] = {function, fnType};
+  LLVMBasicBlockRef entry =
+      LLVMAppendBasicBlockInContext(TheContext, function, "entry");
+  LLVMPositionBuilderAtEnd(builder, entry);
+
+  NamedValues.clear();
+  unsigned idx = 0;
+  for (LLVMValueRef arg = LLVMGetFirstParam(function); arg;
+       arg = LLVMGetNextParam(arg)) {
+    std::string argName = "arg" + std::to_string(++idx);
+    LLVMSetValueName(arg, argName.c_str());
+    NamedValues["%" + std::to_string(idx)] = arg;
+  }
+
+  Body->codegen(module, builder);
+
+  if (LLVMGetBasicBlockTerminator(entry) != nullptr) {
+    if (LLVMGetReturnType(fnType) == LLVMVoidTypeInContext(TheContext)) {
+      throw std::runtime_error("Void function cannot return: " + Name);
+    }
+  }
+
+  if (LLVMGetBasicBlockTerminator(entry) == nullptr) {
+    if (LLVMGetReturnType(fnType) == LLVMVoidTypeInContext(TheContext)) {
+      LLVMBuildRetVoid(builder);
     } else {
       throw std::runtime_error("Non-void function missing return statement: " +
                                Name);
     }
   }
 
+  CurrentFunction = nullptr;
   return function;
 }
 
-llvm::Value *CallExprAST::codegen() {
-  llvm::Function *calleeF = FunctionProtos[Callee];
-  if (!calleeF)
+LLVMValueRef CallExprAST::codegen(LLVMModuleRef module,
+                                  LLVMBuilderRef builder) {
+  auto it = FunctionProtos.find(Callee);
+  if (it == FunctionProtos.end()) {
     throw std::runtime_error("Implicit declaration of function not allowed: " +
                              Callee);
+  }
 
-  std::vector<llvm::Value *> argsV;
-  for (auto &arg : Args)
-    argsV.push_back(arg->codegen());
+  LLVMValueRef calleeF = it->second.FuncVal;
+  LLVMTypeRef calleeType = it->second.FuncType;
 
-  if (calleeF->getReturnType()->isVoidTy()) {
-    return Builder.CreateCall(calleeF, argsV);
+  std::vector<LLVMValueRef> argsV;
+  for (auto &arg : Args) {
+    argsV.push_back(arg->codegen(module, builder));
+  }
+
+  LLVMTypeRef retType = LLVMGetReturnType(calleeType);
+
+  if (LLVMGetTypeKind(retType) == LLVMVoidTypeKind) {
+    return LLVMBuildCall2(builder, calleeType, calleeF, argsV.data(),
+                          argsV.size(), "");
   } else {
-    return Builder.CreateCall(calleeF, argsV, "calltmp");
+    return LLVMBuildCall2(builder, calleeType, calleeF, argsV.data(),
+                          argsV.size(), "calltmp");
   }
 }
 
@@ -181,91 +232,63 @@ uint32_t fnv1a(const std::string &str) {
   return hash;
 }
 
-llvm::Type *getLLVMTypeFor(const std::string &typeStr, llvm::LLVMContext &ctx) {
+LLVMTypeRef getLLVMTypeFor(const std::string &typeStr) {
   if (typeStr == "i32")
-    return llvm::Type::getInt32Ty(ctx);
+    return LLVMInt32TypeInContext(TheContext);
   if (typeStr == "i64")
-    return llvm::Type::getInt64Ty(ctx);
+    return LLVMInt64TypeInContext(TheContext);
   if (typeStr == "f32")
-    return llvm::Type::getFloatTy(ctx);
+    return LLVMFloatTypeInContext(TheContext);
   if (typeStr == "f64")
-    return llvm::Type::getDoubleTy(ctx);
+    return LLVMDoubleTypeInContext(TheContext);
   if (typeStr == "void")
-    return llvm::Type::getVoidTy(ctx);
+    return LLVMVoidTypeInContext(TheContext);
   if (typeStr == "ptr")
-    return llvm::PointerType::get(llvm::Type::getInt8Ty(ctx), 0);
+    return LLVMPointerType(LLVMInt8TypeInContext(TheContext), 0);
   if (typeStr.size() > 1 && typeStr.back() == '*') {
-    auto base = getLLVMTypeFor(typeStr.substr(0, typeStr.size() - 1), ctx);
-    return llvm::PointerType::getUnqual(base);
+    LLVMTypeRef base = getLLVMTypeFor(typeStr.substr(0, typeStr.size() - 1));
+    return LLVMPointerType(base, 0);
   }
   throw std::runtime_error("Unsupported type: " + typeStr);
 }
 
-llvm::Function *ExternAST::codegen() {
-  auto &ctx = TheContext;
-
-  llvm::Type *retTy = getLLVMTypeFor(RetType, ctx);
-
-  std::vector<llvm::Type *> argTys;
-  bool isVarArg = false;
-
-  for (const auto &arg : ArgTypes) {
-    if (arg == "...") {
-      isVarArg = true;
-    } else {
-      argTys.push_back(getLLVMTypeFor(arg, ctx));
-    }
+LLVMValueRef PositionalParamExprAST::codegen(LLVMModuleRef module,
+                                             LLVMBuilderRef builder) {
+  std::string paramName = "%" + std::to_string(Index);
+  auto it = NamedValues.find(paramName);
+  if (it == NamedValues.end()) {
+    throw std::runtime_error("Unknown positional parameter: " + paramName);
   }
-
-  auto funcType = llvm::FunctionType::get(retTy, argTys, isVarArg);
-  auto callee = TheModule->getOrInsertFunction(Name, funcType).getCallee();
-  auto func = llvm::cast<llvm::Function>(callee);
-  FunctionProtos[Name] = func;
-  return func;
+  return it->second;
 }
 
-llvm::Value *ReturnExprAST::codegen() {
-  if (Expr) {
-    auto val = Expr->codegen();
-    Builder.CreateRet(val);
+LLVMValueRef VarDeclExprAST::codegen(LLVMModuleRef module,
+                                     LLVMBuilderRef builder) {
+  LLVMTypeRef llvmType = getLLVMTypeFor(Type);
+  LLVMBasicBlockRef entryBlock = LLVMGetEntryBasicBlock(
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)));
+
+  LLVMBuilderRef tmpBuilder = LLVMCreateBuilderInContext(TheContext);
+
+  if (LLVMGetFirstInstruction(entryBlock)) {
+    LLVMPositionBuilderBefore(tmpBuilder, LLVMGetFirstInstruction(entryBlock));
   } else {
-    Builder.CreateRetVoid();
+    LLVMPositionBuilderAtEnd(tmpBuilder, entryBlock);
   }
-  return nullptr;
-}
 
-llvm::Value *PositionalParamExprAST::codegen() {
-  if (!CurrentFunction)
-    throw std::runtime_error("Positional param used outside function");
-
-  auto *func = FunctionProtos[CurrentFunction->getName()];
-  auto args = func->arg_begin();
-
-  std::advance(args, Index - 1);
-
-  if (Index <= 0 || Index > func->arg_size())
-    throw std::runtime_error("Invalid positional param index");
-
-  return &*args;
-}
-
-llvm::Value *VarDeclExprAST::codegen() {
-  llvm::Type *llvmType = getLLVMTypeFor(Type, TheContext);
-  llvm::Function *func = Builder.GetInsertBlock()->getParent();
-
-  llvm::IRBuilder<> tmpBuilder(&func->getEntryBlock(),
-                               func->getEntryBlock().begin());
-  llvm::AllocaInst *alloca = tmpBuilder.CreateAlloca(llvmType, nullptr, Name);
+  LLVMValueRef alloca = LLVMBuildAlloca(tmpBuilder, llvmType, Name.c_str());
+  LLVMDisposeBuilder(tmpBuilder);
 
   if (InitExpr) {
-    llvm::Value *initVal = InitExpr->codegen();
-    if (initVal->getType() != llvmType) {
+    LLVMValueRef initVal = InitExpr->codegen(module, builder);
+    LLVMTypeRef initTy = LLVMTypeOf(initVal);
+
+    if (LLVMTypeOf(initVal) != llvmType) {
       throw std::runtime_error("Initializer type mismatch for " + Name);
     }
-    Builder.CreateStore(initVal, alloca);
+    LLVMBuildStore(builder, initVal, alloca);
   }
 
   NamedValues[Name] = alloca;
-
   return alloca;
 }
