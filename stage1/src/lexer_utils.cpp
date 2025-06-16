@@ -4,7 +4,6 @@
 #include <string>
 // clang-format on
 
-namespace bcc {
 char *unescape_string(const char *text) {
   std::string input(text);
   std::string output;
@@ -33,4 +32,3 @@ char *unescape_string(const char *text) {
   }
   return strdup(output.c_str());
 }
-} // namespace bcc

@@ -7,7 +7,6 @@
 #include <llvm/IR/Value.h>
 // clang-format on
 
-namespace bcc {
 class ExprAST {
 public:
   virtual ~ExprAST() = default;
@@ -133,4 +132,3 @@ public:
 
   llvm::Value *codegen() override;
 };
-} // namespace bcc

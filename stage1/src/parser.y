@@ -7,13 +7,13 @@
 %union {
   double num;
   char* str;
-  bcc::ExprAST* expr;
-  bcc::FunctionAST* func;
-  std::vector<bcc::FunctionAST*> *funcs;
-  std::vector<bcc::ExprAST*> *args;
-  std::vector<std::unique_ptr<bcc::ExprAST>> *stmts;
+  ExprAST* expr;
+  FunctionAST* func;
+  std::vector<FunctionAST*> *funcs;
+  std::vector<ExprAST*> *args;
+  std::vector<std::unique_ptr<ExprAST>> *stmts;
   std::vector<std::pair<std::string, std::string>>* param_list;
-  bcc::ExternAST* extrn;
+  ExternAST* extrn;
 }
 
 %token EXTRN
@@ -55,7 +55,7 @@
   extern int yylex();
   void yyerror(const char *s);
 
-  std::unique_ptr<bcc::ExprAST> root;
+  std::unique_ptr<ExprAST> root;
 
   void yyerror(const char *s) {
     std::cerr << "Parse error: " << s << std::endl;
@@ -88,7 +88,7 @@ input:
 extrn_decl:
     EXTRN type IDENTIFIER '(' param_list ')' ';' {
       auto typeList = extractTypes(*$5);
-      $$ = new bcc::ExternAST($3, $2, typeList);
+      $$ = new ExternAST($3, $2, typeList);
       $$->codegen();
       free($2);
       free($3);
@@ -151,11 +151,11 @@ base_type:
 function_def:
     type IDENTIFIER '(' param_list ')' block {
       auto typeList = extractTypes(*$4);
-      auto func = new bcc::FunctionAST(
+      auto func = new FunctionAST(
         $2,
         $1,
         typeList,
-        std::make_unique<bcc::BlockAST>(std::move(*$6))
+        std::make_unique<BlockAST>(std::move(*$6))
       );
       $$ = func;
       $$->codegen();
@@ -168,65 +168,65 @@ block:
   ;
 
 statements:
-    { $$ = new std::vector<std::unique_ptr<bcc::ExprAST>>(); }
+    { $$ = new std::vector<std::unique_ptr<ExprAST>>(); }
     | statements statement  {
-      $1->push_back(std::unique_ptr<bcc::ExprAST>($2));
+      $1->push_back(std::unique_ptr<ExprAST>($2));
       $$ = $1;
     }
 ;
 
 statement:
   IDENTIFIER '(' expr_list ')' ';' {
-      std::vector<std::unique_ptr<bcc::ExprAST>> argsVec;
+      std::vector<std::unique_ptr<ExprAST>> argsVec;
       for (auto *arg : *$3) argsVec.emplace_back(arg);
       delete $3;
-      $$ = new bcc::CallExprAST($1, std::move(argsVec));
+      $$ = new CallExprAST($1, std::move(argsVec));
   }
   | IDENTIFIER '(' ')' ';' {
-      $$ = new bcc::CallExprAST($1, {});
+      $$ = new CallExprAST($1, {});
   }
   | RETURN expression ';' {
-      $$ = new bcc::ReturnExprAST(std::unique_ptr<bcc::ExprAST>($2));
+      $$ = new ReturnExprAST(std::unique_ptr<ExprAST>($2));
   }
   | type IDENTIFIER ';' {
-      $$ = new bcc::VarDeclExprAST($2, $1);
+      $$ = new VarDeclExprAST($2, $1);
       free($1);
       free($2);
   }
   | type IDENTIFIER '=' expression ';' {
-      $$ = new bcc::VarDeclExprAST($2, $1, std::unique_ptr<bcc::ExprAST>($4));
+      $$ = new VarDeclExprAST($2, $1, std::unique_ptr<ExprAST>($4));
       free($1);
       free($2);
   }
 ;
 
 expr_list:
-    expression                     { $$ = new std::vector<bcc::ExprAST*>(); $$->push_back($1); }
+    expression                     { $$ = new std::vector<ExprAST*>(); $$->push_back($1); }
   | expr_list ',' expression       { $$->push_back($3); $$ = $1; }
   ;
 
 expression:
-    NUMBER                         { $$ = new bcc::NumberExprAST($1); }
-  | STRING                         { $$ = new bcc::StringLiteralExprAST($1); }
+    NUMBER                         { $$ = new NumberExprAST($1); }
+  | STRING                         { $$ = new StringLiteralExprAST($1); }
   | IDENTIFIER '(' expr_list ')'   { 
-      std::vector<std::unique_ptr<bcc::ExprAST>> argsVec;
+      std::vector<std::unique_ptr<ExprAST>> argsVec;
       for (auto *arg : *$3) argsVec.emplace_back(arg);
       delete $3;
-      $$ = new bcc::CallExprAST($1, std::move(argsVec));
+      $$ = new CallExprAST($1, std::move(argsVec));
     }
   | IDENTIFIER '(' ')'             {
-      $$ = new bcc::CallExprAST($1, {});
+      $$ = new CallExprAST($1, {});
     }
   | IDENTIFIER                     {
-      $$ = new bcc::VariableExprAST($1);
+      $$ = new VariableExprAST($1);
     }
-  | expression '+' expression      { $$ = new bcc::BinaryExprAST('+',
-                                        std::unique_ptr<bcc::ExprAST>($1),
-                                        std::unique_ptr<bcc::ExprAST>($3)); }
-  | expression '*' expression      { $$ = new bcc::BinaryExprAST('*',
-                                        std::unique_ptr<bcc::ExprAST>($1),
-                                        std::unique_ptr<bcc::ExprAST>($3)); }
-  | POSITIONAL_PARAM               { $$ = new bcc::PositionalParamExprAST((int)$1); }
+  | expression '+' expression      { $$ = new BinaryExprAST('+',
+                                        std::unique_ptr<ExprAST>($1),
+                                        std::unique_ptr<ExprAST>($3)); }
+  | expression '*' expression      { $$ = new BinaryExprAST('*',
+                                        std::unique_ptr<ExprAST>($1),
+                                        std::unique_ptr<ExprAST>($3)); }
+  | POSITIONAL_PARAM               { $$ = new PositionalParamExprAST((int)$1); }
 ;
 
 %%

@@ -20,7 +20,7 @@
 \"([^\\\"]|\\.)*\" {
     char* raw = strdup(yytext + 1);
     raw[strlen(raw) - 1] = 0;
-    yylval.str = bcc::unescape_string(raw);
+    yylval.str = unescape_string(raw);
     free(raw);
     return STRING;
 }

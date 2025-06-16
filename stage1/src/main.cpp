@@ -22,7 +22,7 @@
 // clang-format on
 
 extern int yyparse();
-extern std::unique_ptr<bcc::ExprAST> root;
+extern std::unique_ptr<ExprAST> root;
 
 yyFlexLexer lexer;
 int yylex() { return lexer.yylex(); }
@@ -90,11 +90,11 @@ int main(int argc, char **argv) {
   lexer.switch_streams(&input, nullptr);
   yyparse();
 
-  for (auto &ext : bcc::externs) {
+  for (auto &ext : externs) {
     ext->codegen();
   }
 
-  for (auto &func : bcc::functions) {
+  for (auto &func : functions) {
     func->codegen();
   }
 
@@ -109,24 +109,24 @@ int main(int argc, char **argv) {
       return 1;
     }
 
-    bcc::TheModule->print(irOut, nullptr);
+    TheModule->print(irOut, nullptr);
     irOut.flush();
 
     std::cout << "Successfully emitted IR: " << irFileName << "\n";
     return 0;
   }
 
-  if (llvm::verifyModule(*bcc::TheModule, &llvm::errs())) {
+  if (llvm::verifyModule(*TheModule, &llvm::errs())) {
     throw std::runtime_error("Generated IR is invalid!");
   }
 
-  if (!bcc::FunctionProtos.count("main")) {
+  if (!FunctionProtos.count("main")) {
     std::cerr << "Error: main function not found in prototypes!\n";
     return 1;
   }
 
   auto targetTriple = llvm::sys::getDefaultTargetTriple();
-  bcc::TheModule->setTargetTriple(targetTriple);
+  TheModule->setTargetTriple(targetTriple);
 
   std::string error;
   auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
   auto RM = llvm::Reloc::PIC_;
   auto targetMachine =
       target->createTargetMachine(targetTriple, cpu, features, opt, RM);
-  bcc::TheModule->setDataLayout(targetMachine->createDataLayout());
+  TheModule->setDataLayout(targetMachine->createDataLayout());
 
 #ifdef _WIN32
   std::string objFileName = outFile + ".obj";
@@ -164,7 +164,7 @@ int main(int argc, char **argv) {
     std::cerr << "TargetMachine can't emit a file of this type!\n";
   }
 
-  pass.run(*bcc::TheModule);
+  pass.run(*TheModule);
   dest.flush();
 
   if (!compileOnly) {

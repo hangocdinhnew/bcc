@@ -1,8 +1,3 @@
-#ifndef UTILS_H
-#define UTILS_H
+#pragma once
 
-namespace bcc {
 char *unescape_string(const char *text);
-}
-
-#endif

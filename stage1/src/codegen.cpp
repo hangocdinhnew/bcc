@@ -6,14 +6,13 @@
 #include <iostream>
 // clang-format on
 
-namespace bcc {
 llvm::LLVMContext TheContext;
 llvm::IRBuilder<> Builder(TheContext);
 std::unique_ptr<llvm::Module> TheModule =
     std::make_unique<llvm::Module>("B+ Compiler", TheContext);
 std::map<std::string, llvm::Function *> FunctionProtos;
 std::vector<std::unique_ptr<ExternAST>> externs;
-std::vector<std::unique_ptr<bcc::FunctionAST>> functions;
+std::vector<std::unique_ptr<FunctionAST>> functions;
 
 static std::map<std::string, llvm::Value *> NamedValues;
 static thread_local FunctionAST *CurrentFunction = nullptr;
@@ -270,4 +269,3 @@ llvm::Value *VarDeclExprAST::codegen() {
 
   return alloca;
 }
-} // namespace bcc
