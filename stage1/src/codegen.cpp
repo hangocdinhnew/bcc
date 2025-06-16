@@ -170,8 +170,7 @@ LLVMValueRef FunctionAST::codegen(LLVMModuleRef module,
   unsigned idx = 0;
   for (LLVMValueRef arg = LLVMGetFirstParam(function); arg;
        arg = LLVMGetNextParam(arg)) {
-    std::string argName = "arg" + std::to_string(++idx);
-    LLVMSetValueName(arg, argName.c_str());
+    idx++;
     NamedValues["%" + std::to_string(idx)] = arg;
   }
 

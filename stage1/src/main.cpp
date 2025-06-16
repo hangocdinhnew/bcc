@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
   std::istringstream input(code);
 
   TheContext = LLVMContextCreate();
-  TheModule = LLVMModuleCreateWithNameInContext("B+ Compiler", TheContext);
+  TheModule = LLVMModuleCreateWithNameInContext(inputFile.c_str(), TheContext);
   Builder = LLVMCreateBuilderInContext(TheContext);
 
   lexer.switch_streams(&input, nullptr);
